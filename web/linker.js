@@ -1029,7 +1029,23 @@ class LinkerManagerDialog extends ComfyDialog {
         
         // Card Header: Filename as headline + node chip
         html += `<div class="ml-card-header">`;
-        html += `<h3 class="ml-card-title" title="${missingFilename.full}">${missingFilename.display}</h3>`;
+        // Show URN + CivitAI model name + version name if available
+        let titleHtml = `<span title="${missingFilename.full}">${missingFilename.display}</span>`;
+        if (missing.is_urn && missing.civitai_info) {
+            let civitaiLabel = '';
+            if (missing.civitai_info.model_name) {
+                civitaiLabel += `"${missing.civitai_info.model_name}"`;
+            }
+            if (missing.civitai_info.version_name && missing.civitai_info.version_name !== missing.civitai_info.model_name) {
+                civitaiLabel += ` ${missing.civitai_info.version_name}`;
+            }
+            if (civitaiLabel) {
+                titleHtml += ` <span style="color: var(--ml-text-muted); font-size: 14px;">${civitaiLabel}</span>`;
+            }
+        } else if (missing.civitai_info && missing.civitai_info.model_name) {
+            titleHtml += ` <span style="color: var(--ml-text-muted); font-size: 14px;">(${missing.civitai_info.model_name})</span>`;
+        }
+        html += `<h3 class="ml-card-title">${titleHtml}</h3>`;
         html += `<div style="display: flex; align-items: center; gap: 6px;">`;
         if (missing.category) {
             html += `<span class="ml-category-chip">${missing.category}</span>`;

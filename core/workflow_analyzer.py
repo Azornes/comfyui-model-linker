@@ -19,6 +19,24 @@ except ImportError:
 # Common model file extensions
 MODEL_EXTENSIONS = {'.ckpt', '.pt', '.pt2', '.bin', '.pth', '.safetensors', '.pkl', '.sft', '.onnx'}
 
+import re
+
+# URN Type to ComfyUI category mapping
+URN_TYPE_MAP = {
+    'checkpoint': 'checkpoints',
+    'lora': 'loras', 
+    'vae': 'vae',
+    'upscaler': 'upscale_models',
+    'upscale_model': 'upscale_models',
+    'embedding': 'embeddings',
+    'hypernetwork': 'hypernetworks',
+    'controlnet': 'controlnet',
+    'clip': 'clip',
+    'clip_vision': 'clip_vision'
+}
+
+URN_REGEX = re.compile(r'^urn:air:([^:]+):([^:]+):([^:]+):(\d+)@(\d+)$')
+
 # Mapping of common node types to their expected model category
 # This is used as hints but we don't rely solely on this
 # UNETLoader uses 'diffusion_models' category (folder_paths maps 'unet' to 'diffusion_models')
@@ -41,20 +59,24 @@ NODE_TYPE_TO_CATEGORY_HINTS = {
 
 def is_model_filename(value: Any) -> bool:
     """
-    Check if a value looks like a model filename.
+    Check if a value looks like a model filename or URN.
     
     Args:
         value: The value to check
         
     Returns:
-        True if it looks like a model filename
+        True if it looks like a model filename or URN
     """
     if not isinstance(value, str):
         return False
     
-    # Check if it ends with a model extension
+    # Check model extension
     _, ext = os.path.splitext(value.lower())
-    return ext in MODEL_EXTENSIONS
+    if ext in MODEL_EXTENSIONS:
+        return True
+    
+    # Check URN format
+    return bool(URN_REGEX.match(value.strip()))
 
 
 def try_resolve_model_path(value: str, categories: List[str] = None) -> Optional[tuple[str, str]]:
@@ -137,20 +159,46 @@ def get_node_model_info(node: Dict[str, Any]) -> List[Dict[str, Any]]:
     category_hint = NODE_TYPE_TO_CATEGORY_HINTS.get(node_type)
     categories_to_try = [category_hint] if category_hint else None
     
-    # For each widget value, check if it looks like a model file
+    # For each widget value, check if it looks like a model file or URN
     for idx, value in enumerate(widgets_values):
         if not is_model_filename(value):
             continue
         
-        # Try to resolve the model path
-        resolved = try_resolve_model_path(value, categories_to_try)
+        value_str = str(value).strip()
+        
+        # Check if URN
+        urn_match = URN_REGEX.match(value_str)
+        if urn_match:
+            base, typ, provider, model_id, version_id = urn_match.groups()
+            category = URN_TYPE_MAP.get(typ.lower(), 'unknown')
+            
+            model_refs.append({
+                'node_id': node_id,
+                'node_type': node_type,
+                'widget_index': idx,
+                'original_path': value_str,
+                'urn': {
+                    'full': value_str,
+                    'base': base,
+                    'type': typ,
+                    'provider': provider,
+                    'model_id': int(model_id),
+                    'version_id': int(version_id)
+                },
+                'category': category,
+                'full_path': None,
+                'exists': False,  # URNs always need resolution
+                'is_urn': True
+            })
+            continue
+        
+        # Existing logic for local filenames
+        resolved = try_resolve_model_path(value_str, categories_to_try)
         
         if resolved:
             category, full_path = resolved
             exists = os.path.exists(full_path)
         else:
-            # If we can't resolve it, check if it at least looks like a model filename
-            # This might be a missing model or a custom node's model
             category = category_hint or 'unknown'
             full_path = None
             exists = False
@@ -159,10 +207,11 @@ def get_node_model_info(node: Dict[str, Any]) -> List[Dict[str, Any]]:
             'node_id': node_id,
             'node_type': node_type,
             'widget_index': idx,
-            'original_path': value,
+            'original_path': value_str,
             'category': category,
             'full_path': full_path,
-            'exists': exists
+            'exists': exists,
+            'is_urn': False
         })
     
     return model_refs

@@ -15,6 +15,7 @@ from .scanner import get_model_files
 from .workflow_analyzer import analyze_workflow_models, identify_missing_models
 from .matcher import find_matches
 from .workflow_updater import update_workflow_nodes
+from .sources.civitai import resolve_urn
 
 logger = logging.getLogger(__name__)
 
@@ -224,17 +225,32 @@ def analyze_and_find_matches(
             missing['workflow_directory'] = url_info.get('directory', '')
             missing['url_source'] = url_info.get('source', '')
     
+    # Handle URNs: fetch expected filename from CivitAI
+    for missing in missing_models:
+        if missing.get('is_urn'):
+            urn = missing['urn']
+            model_info = resolve_urn(urn['model_id'], urn['version_id'])
+            if model_info:
+                missing['civitai_info'] = {
+                    'model_name': model_info.get('model_name'),
+                    'version_name': model_info.get('version_name')
+                }
+            if model_info:
+                missing['civitai_info'] = model_info
+                missing['expected_filename'] = model_info['expected_filename']
+                logger.debug(f"URN {missing['original_path']} → {missing['expected_filename']}")
+    
     # Find matches for each missing model
     missing_with_matches = []
     for missing in missing_models:
-        original_path = missing.get('original_path', '')
+        target_for_matching = missing.get('original_path', '')
+        
+        # For URNs, prefer expected_filename for matching
+        if missing.get('is_urn') and missing.get('expected_filename'):
+            target_for_matching = missing['expected_filename']
         
         # Filter available models by category if known
-        # IMPORTANT: If category is 'unknown', we still try to find the right category
-        # by using node type hints
         category = missing.get('category')
-        
-        # If category is unknown, try to use node type to infer category
         if not category or category == 'unknown':
             from .workflow_analyzer import NODE_TYPE_TO_CATEGORY_HINTS
             node_type = missing.get('node_type', '')
@@ -242,41 +258,32 @@ def analyze_and_find_matches(
         
         candidates = available_models
         if category and category != 'unknown':
-            # Prioritize models from the same category
             candidates = [m for m in available_models if m.get('category') == category]
-            # Also include other categories as fallback
             candidates.extend([m for m in available_models if m.get('category') != category])
         
         # Find matches
         matches = find_matches(
-            original_path,
+            target_for_matching,
             candidates,
             threshold=similarity_threshold,
             max_results=max_matches_per_model
         )
         
-        # Deduplicate matches by absolute path - same physical file should only appear once
-        # This handles cases where the same file exists in multiple base directories
-        # or has different relative_paths but is the same file
+        # Deduplicate matches by absolute path
         seen_absolute_paths = {}
         deduplicated_matches = []
         for match in matches:
             model_dict = match['model']
             absolute_path = model_dict.get('path', '')
-            
-            # Normalize absolute path for comparison
             if absolute_path:
                 absolute_path = os.path.normpath(absolute_path)
             
-            # If we haven't seen this absolute path, add it
             if absolute_path not in seen_absolute_paths:
                 seen_absolute_paths[absolute_path] = match
                 deduplicated_matches.append(match)
             else:
-                # If we've seen this absolute path before, replace with better match if confidence is higher
                 existing_match = seen_absolute_paths[absolute_path]
                 if match['confidence'] > existing_match['confidence']:
-                    # Replace with better match
                     idx = deduplicated_matches.index(existing_match)
                     deduplicated_matches[idx] = match
                     seen_absolute_paths[absolute_path] = match

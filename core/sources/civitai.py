@@ -15,8 +15,9 @@ logger = logging.getLogger(__name__)
 
 CIVITAI_API_URL = "https://civitai.com/api/v1"
 
-# Cache for search results
+# Cache for search results and URN resolutions
 _search_cache: Dict[str, Any] = {}
+_urn_cache: Dict[tuple[int, int], Dict[str, Any]] = {}
 
 
 def parse_civitai_url(url: str) -> Optional[Dict[str, Any]]:
@@ -307,3 +308,92 @@ def search_civitai_by_hash(
         logger.error(f"CivitAI hash lookup error: {e}")
     
     return None
+
+
+def resolve_urn(
+    model_id: int, 
+    version_id: int, 
+    api_key: Optional[str] = None
+) -> Optional[Dict[str, Any]]:
+    """
+    Resolve URN model_id/version_id to model info and expected filename.
+    
+    Args:
+        model_id: CivitAI model ID
+        version_id: CivitAI version ID  
+        api_key: Optional API key
+        
+    Returns:
+        Dict with model name and primary filename, or None
+    """
+    cache_key = (model_id, version_id)
+    if cache_key in _urn_cache:
+        return _urn_cache[cache_key]
+    
+    try:
+        headers = {}
+        if api_key:
+            headers['Authorization'] = f'Bearer {api_key}'
+        
+        url = f"{CIVITAI_API_URL}/models/{model_id}"
+        params = {'modelVersionId': version_id}
+        
+        response = requests.get(url, headers=headers, params=params, timeout=15)
+        
+        if response.status_code != 200:
+            logger.warning(f"CivitAI URN resolve failed: {response.status_code}")
+            _urn_cache[cache_key] = None
+            return None
+        
+        data = response.json()
+        versions = data.get('modelVersions', [])
+        
+        if not versions:
+            logger.warning(f"No versions found for model {model_id}/version {version_id}")
+            _urn_cache[cache_key] = None
+            return None
+        
+        # Get specific version
+        target_version = None
+        for v in versions:
+            if v.get('id') == version_id:
+                target_version = v
+                break
+        
+        if not target_version:
+            logger.warning(f"Version {version_id} not found in model {model_id}")
+            _urn_cache[cache_key] = None
+            return None
+        
+        files = target_version.get('files', [])
+        primary_file = None
+        
+        # Prefer primary file or type=='Model'
+        for f in files:
+            if f.get('primary') or f.get('type') == 'Model':
+                primary_file = f
+                break
+        
+        if not primary_file and files:
+            primary_file = files[0]  # Fallback to first
+        
+        if not primary_file:
+            logger.warning(f"No files found for version {version_id}")
+            _urn_cache[cache_key] = None
+            return None
+        
+        result = {
+            'model_name': data.get('name', 'Unknown'),
+            'version_name': target_version.get('name', 'Unknown'),
+            'expected_filename': primary_file.get('name', 'Unknown'),
+            'files': [{'name': f.get('name'), 'size': f.get('sizeKB', 0)*1024} for f in files]
+        }
+        
+        _urn_cache[cache_key] = result
+        logger.info(f"Resolved URN model {model_id}@{version_id} → {result['expected_filename']}")
+        return result
+        
+    except Exception as e:
+        logger.error(f"CivitAI URN resolve error for {model_id}@{version_id}: {e}")
+        _urn_cache[cache_key] = None
+        return None
