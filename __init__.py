@@ -293,6 +293,148 @@ class ModelLinkerExtension:
                     )
                     return web.json_response({"error": str(e)}, status=500)
 
+            @routes.post("/model_linker/loaded")
+            async def get_loaded_models(request):
+                """Get all currently loaded models in the workflow."""
+                try:
+                    data = await request.json()
+                    workflow_json = data.get("workflow")
+
+                    if not workflow_json:
+                        return web.json_response(
+                            {"error": "Workflow JSON is required"}, status=400
+                        )
+
+                    # Import workflow analyzer to extract models
+                    from .core.workflow_analyzer import (
+                        analyze_workflow_models,
+                        try_resolve_model_path,
+                        is_model_filename,
+                        URN_REGEX,
+                        URN_TYPE_MAP,
+                    )
+
+                    # Get available models for existence checking
+                    available_models = get_model_files()
+                    available_paths = {m.get("path") for m in available_models}
+
+                    # Analyze workflow to get all model references
+                    all_model_refs = analyze_workflow_models(workflow_json)
+
+                    # Also extract from node.properties.models
+                    nodes = list(workflow_json.get("nodes", []))
+                    definitions = workflow_json.get("definitions", {})
+                    subgraphs = definitions.get("subgraphs", [])
+                    for subgraph in subgraphs:
+                        nodes.extend(subgraph.get("nodes", []))
+
+                    # Collect all loaded models with their values
+                    loaded_models = []
+
+                    # Process each model reference from analyze_workflow_models
+                    for ref in all_model_refs:
+                        original_path = ref.get("original_path", "")
+                        node_id = ref.get("node_id")
+                        widget_index = ref.get("widget_index")
+                        node_type = ref.get("node_type", "")
+                        category = ref.get("category", "unknown")
+
+                        # Determine model name and strength
+                        model_name = original_path.split("/")[-1].split("\\")[-1]
+                        strength = None
+
+                        # For LoraLoader nodes, strength is in next widget_value
+                        if node_type in ["LoraLoader", "LoraLoaderModelOnly"]:
+                            # Find the node in workflow to get strength value
+                            for node in nodes:
+                                if str(node.get("id")) == str(node_id):
+                                    widgets_values = node.get("widgets_values", [])
+                                    if len(widgets_values) > widget_index + 1:
+                                        try:
+                                            strength = float(
+                                                widgets_values[widget_index + 1]
+                                            )
+                                        except (ValueError, TypeError):
+                                            strength = 1.0
+                                    break
+
+                        # Check if model exists locally
+                        exists = ref.get("exists", False)
+
+                        # If URN, resolve to display name
+                        if ref.get("is_urn"):
+                            urn = ref.get("urn", {})
+                            # Use model name from URN as display name
+                            model_name = (
+                                f"urn:{urn.get('type', 'model')}:{urn.get('model_id')}"
+                            )
+                            category = urn.get("type", category)
+                            if category in URN_TYPE_MAP:
+                                category = URN_TYPE_MAP[category]
+
+                        loaded_models.append(
+                            {
+                                "name": model_name,
+                                "category": category,
+                                "node_id": node_id,
+                                "widget_index": widget_index,
+                                "node_type": node_type,
+                                "exists": exists,
+                                "strength": strength,
+                                "original_path": original_path,
+                                "is_urn": ref.get("is_urn", False),
+                            }
+                        )
+
+                    # Also check node.properties.models for embedded models
+                    for node in nodes:
+                        node_type = node.get("type", "")
+                        properties = node.get("properties", {})
+                        models_list = properties.get("models", [])
+
+                        for model_info in models_list:
+                            if isinstance(model_info, dict):
+                                name = model_info.get("name", "")
+                                url = model_info.get("url", "")
+                                directory = model_info.get("directory", "")
+
+                                if name:
+                                    # Check if this model is already in loaded_models
+                                    existing = next(
+                                        (
+                                            m
+                                            for m in loaded_models
+                                            if m.get("original_path") == name
+                                        ),
+                                        None,
+                                    )
+                                    if not existing:
+                                        loaded_models.append(
+                                            {
+                                                "name": name.split("/")[-1].split("\\")[
+                                                    -1
+                                                ],
+                                                "category": directory or "checkpoints",
+                                                "node_id": node.get("id"),
+                                                "widget_index": None,
+                                                "node_type": node_type,
+                                                "exists": True,  # Embedded models are loaded
+                                                "strength": None,
+                                                "original_path": name,
+                                                "is_urn": False,
+                                            }
+                                        )
+
+                    return web.json_response(
+                        {"loaded_models": loaded_models, "total": len(loaded_models)}
+                    )
+
+                except Exception as e:
+                    self.logger.error(
+                        f"Model Linker get_loaded_models error: {e}", exc_info=True
+                    )
+                    return web.json_response({"error": str(e)}, status=500)
+
             # ==================== DOWNLOAD ROUTES ====================
 
             if download_available:

@@ -17,6 +17,7 @@ class LinkerManagerDialog extends ComfyDialog {
         this.missingModels = [];
         this.activeDownloads = {};  // Track active downloads
         this.boundHandleOutsideClick = this.handleOutsideClick.bind(this);
+        this.activeTab = 'missing';  // Default tab
         
         // Inject global styles for the redesigned UI
         this.injectStyles();
@@ -419,6 +420,87 @@ class LinkerManagerDialog extends ComfyDialog {
                 background: linear-gradient(to top, var(--ml-bg) 0%, var(--ml-bg) 70%, transparent 100%);
                 border-top: 1px solid var(--ml-border);
             }
+
+            /* Tabs */
+            .ml-tabs {
+                display: flex;
+                gap: 4px;
+                padding: 0 20px;
+                margin-bottom: 0;
+                background-color: var(--ml-bg, #222);
+                border-bottom: 1px solid var(--ml-border);
+            }
+            .ml-tab {
+                padding: 12px 20px;
+                background: transparent;
+                border: none;
+                color: var(--ml-text-muted, #888);
+                font-size: 13px;
+                font-weight: 500;
+                cursor: pointer;
+                border-bottom: 2px solid transparent;
+                transition: all 0.2s ease;
+            }
+            .ml-tab:hover {
+                color: var(--ml-text, #e0e0e0);
+                background: rgba(255,255,255,0.05);
+            }
+            .ml-tab.ml-tab-active {
+                color: var(--ml-accent, #4CAF50);
+                border-bottom-color: var(--ml-accent, #4CAF50);
+            }
+
+            /* Loaded Models Tab */
+            .ml-loaded-models {
+                padding: 0;
+            }
+            .ml-loaded-models-header {
+                padding: 16px 20px;
+                border-bottom: 1px solid var(--ml-border);
+            }
+            .ml-loaded-models-title {
+                font-size: 15px;
+                font-weight: 600;
+                color: var(--ml-text);
+                margin: 0 0 8px 0;
+            }
+            .ml-loaded-models-subtitle {
+                font-size: 12px;
+                color: var(--ml-text-muted);
+            }
+            .ml-models-list {
+                padding: 12px 20px;
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+            }
+            .ml-model-chip {
+                display: inline-flex;
+                align-items: center;
+                padding: 6px 12px;
+                background: #3a3a3a;
+                border-radius: 6px;
+                font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
+                font-size: 12px;
+                color: var(--ml-text);
+            }
+            .ml-model-chip-category {
+                padding: 2px 6px;
+                background: #555;
+                border-radius: 4px;
+                font-size: 10px;
+                color: #aaa;
+                margin-left: 8px;
+                text-transform: uppercase;
+            }
+            .ml-model-chip-strength {
+                padding: 2px 6px;
+                background: #4CAF50;
+                border-radius: 4px;
+                font-size: 10px;
+                color: white;
+                margin-left: 8px;
+            }
             
             /* No matches text */
             .ml-no-matches {
@@ -583,44 +665,222 @@ class LinkerManagerDialog extends ComfyDialog {
     }
     
     createHeader() {
+        // Create tabs
+        this.missingTab = $el("button.ml-tab.ml-tab-active", {
+            textContent: "Missing Models",
+            onclick: () => this.switchTab('missing')
+        });
+        
+        this.loadedTab = $el("button.ml-tab", {
+            textContent: "Loaded Models",
+            onclick: () => this.switchTab('loaded')
+        });
+        
         return $el("div", {
             style: {
                 display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                padding: "20px 20px 10px 20px",
-                borderBottom: "1px solid var(--border-color)",
-                backgroundColor: "var(--comfy-menu-bg, #202020)"
+                flexDirection: "column"
             }
         }, [
-            $el("h2", {
-                textContent: "🔗 Model Linker",
+            $el("div", {
                 style: {
-                    margin: "0",
-                    color: "var(--input-text)",
-                    fontSize: "18px",
-                    fontWeight: "600"
-                }
-            }),
-            $el("button", {
-                textContent: "×",
-                onclick: () => this.close(),
-                style: {
-                    background: "none",
-                    border: "none",
-                    fontSize: "24px",
-                    cursor: "pointer",
-                    color: "var(--input-text)",
-                    padding: "0",
-                    width: "30px",
-                    height: "30px",
-                    borderRadius: "4px",
                     display: "flex",
+                    justifyContent: "space-between",
                     alignItems: "center",
-                    justifyContent: "center"
+                    padding: "20px 20px 10px 20px",
+                    borderBottom: "1px solid var(--border-color)",
+                    backgroundColor: "var(--comfy-menu-bg, #202020)"
                 }
-            })
+            }, [
+                $el("h2", {
+                    textContent: "🔗 Model Linker",
+                    style: {
+                        margin: "0",
+                        color: "var(--input-text)",
+                        fontSize: "18px",
+                        fontWeight: "600"
+                    }
+                }),
+                $el("button", {
+                    textContent: "×",
+                    onclick: () => this.close(),
+                    style: {
+                        background: "none",
+                        border: "none",
+                        fontSize: "24px",
+                        cursor: "pointer",
+                        color: "var(--input-text)",
+                        padding: "0",
+                        width: "30px",
+                        height: "30px",
+                        borderRadius: "4px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center"
+                    }
+                })
+            ]),
+            $el("div.ml-tabs", {}, [
+                this.missingTab,
+                this.loadedTab
+            ])
         ]);
+    }
+
+    switchTab(tab) {
+        this.activeTab = tab;
+        
+        if (tab === 'missing') {
+            this.missingTab.classList.add('ml-tab-active');
+            this.loadedTab.classList.remove('ml-tab-active');
+            this.downloadAllButton.style.display = 'inline-flex';
+            this.autoResolveButton.style.display = 'inline-flex';
+            this.loadWorkflowData();
+        } else {
+            this.missingTab.classList.remove('ml-tab-active');
+            this.loadedTab.classList.add('ml-tab-active');
+            this.downloadAllButton.style.display = 'none';
+            this.autoResolveButton.style.display = 'none';
+            this.loadLoadedModels();
+        }
+    }
+
+    async loadLoadedModels() {
+        if (!this.contentElement) return;
+
+        this.contentElement.innerHTML = '<p>Loading loaded models...</p>';
+
+        try {
+            const workflow = this.getCurrentWorkflow();
+            if (!workflow) {
+                this.contentElement.innerHTML = '<p>No workflow loaded. Please load a workflow first.</p>';
+                return;
+            }
+
+            const response = await api.fetchApi('/model_linker/loaded', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ workflow })
+            });
+
+            if (!response.ok) {
+                throw new Error(`API error: ${response.status}`);
+            }
+
+            const data = await response.json();
+            this.displayLoadedModels(this.contentElement, data);
+
+        } catch (error) {
+            console.error('Model Linker: Error loading loaded models:', error);
+            if (this.contentElement) {
+                this.contentElement.innerHTML = `<p style="color: red;">Error: ${error.message}</p>`;
+            }
+        }
+    }
+
+    displayLoadedModels(container, data) {
+        const loadedModels = data.loaded_models || [];
+        const total = data.total || 0;
+
+        if (total === 0) {
+            container.innerHTML = this.renderStatusMessage('No models found in workflow.', 'info');
+            return;
+        }
+
+        // Category display name mapping (singular form)
+        const categoryDisplayNames = {
+            'checkpoints': 'checkpoint',
+            'loras': 'lora',
+            'vae': 'vae',
+            'controlnet': 'controlnet',
+            'embeddings': 'embedding',
+            'upscale_models': 'upscale_model',
+            'diffusion_models': 'unet',
+            'clip': 'clip',
+            'clip_vision': 'clip_vision',
+            'hypernetworks': 'hypernetwork'
+        };
+
+        // Group by category
+        const byCategory = {};
+        for (const model of loadedModels) {
+            const cat = model.category || 'unknown';
+            if (!byCategory[cat]) {
+                byCategory[cat] = [];
+            }
+            byCategory[cat].push(model);
+        }
+
+        // Build display string in format: <category:name:strength> for each category (using singular form)
+        const categoryStrings = {};
+        for (const [category, models] of Object.entries(byCategory)) {
+            const displayCat = categoryDisplayNames[category] || category;
+            const parts = [];
+            for (const model of models) {
+                const fullName = model.name || model.original_path?.split(/[\/\\]/).pop() || 'Unknown';
+                // Remove file extension
+                const name = fullName.replace(/\.(safetensors|ckpt|pt|pth|bin|pkl|sft|onnx)$/i, '');
+                const strength = model.strength !== null && model.strength !== undefined 
+                    ? model.strength.toFixed(2) 
+                    : '1.00';
+                parts.push(`<${displayCat}:${name}:${strength}>`);
+            }
+            categoryStrings[category] = parts.join(' ');
+        }
+
+        // Build all models string
+        const allParts = Object.values(categoryStrings).join(' ');
+
+        // Display header
+        let html = `
+            <div class="ml-loaded-models-header">
+                <h3 class="ml-loaded-models-title">${total} Loaded Model${total > 1 ? 's' : ''}</h3>
+                <p class="ml-loaded-models-subtitle">Models currently used in the workflow</p>
+            </div>
+            <div class="ml-models-list">
+        `;
+
+        // Display as chips grouped by category with copy button for each section
+        for (const [category, models] of Object.entries(byCategory)) {
+            const catString = categoryStrings[category];
+            const displayName = categoryDisplayNames[category] || category;
+            html += `<div style="margin-bottom: 16px; padding: 12px; background: var(--ml-card-bg-alt, #252525); border-radius: 8px;">`;
+            html += `<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">`;
+            html += `<span class="ml-category-chip" style="margin: 0; font-size: 12px; padding: 4px 10px;">${category}</span>`;
+            html += `<button class="ml-btn ml-btn-sm" style="padding: 3px 8px; font-size: 10px;" onclick="navigator.clipboard.writeText('${catString.replace(/'/g, "\\'")}').then(() => { const btn = event.target; const orig = btn.textContent; btn.textContent = '✓'; setTimeout(() => btn.textContent = orig, 1500); })">Copy</button>`;
+            html += `</div>`;
+            html += `<div style="display: flex; flex-wrap: wrap; gap: 8px;">`;
+            
+            for (const model of models) {
+                const fullName = model.name || model.original_path?.split(/[\/\\]/).pop() || 'Unknown';
+                const name = fullName.replace(/\.(safetensors|ckpt|pt|pth|bin|pkl|sft|onnx)$/i, '');
+                const strength = model.strength !== null && model.strength !== undefined 
+                    ? model.strength.toFixed(2) 
+                    : null;
+                
+                html += `<span class="ml-model-chip">${name}`;
+                if (strength !== null) {
+                    html += `<span class="ml-model-chip-strength">${strength}</span>`;
+                }
+                html += `</span>`;
+            }
+            
+            html += `</div></div>`;
+        }
+
+        // Add copyable string at the bottom for all models
+        html += `
+            </div>
+            <div style="padding: 16px 20px; border-top: 1px solid var(--ml-border);">
+                <div style="font-size: 12px; color: var(--ml-text-muted); margin-bottom: 8px;">Copy all models:</div>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <code style="flex: 1; padding: 8px 12px; background: #1a1a1a; border-radius: 4px; font-family: 'SF Mono', 'Consolas', monospace; font-size: 11px; color: #90caf9; overflow-x: auto; white-space: nowrap;">${allParts}</code>
+                    <button class="ml-btn ml-btn-secondary" onclick="navigator.clipboard.writeText('${allParts.replace(/'/g, "\\'")}').then(() => { const btn = event.target; const orig = btn.textContent; btn.textContent = '✓ Copied!'; setTimeout(() => btn.textContent = orig, 1500); })">Copy All</button>
+                </div>
+            </div>
+        `;
+
+        container.innerHTML = html;
     }
     
     createContent() {
