@@ -884,6 +884,11 @@ class LinkerManagerDialog extends ComfyDialog {
             
             html += `<div class="ml-model-section" data-ml-filter="all" data-ml-active="${hasActive}" data-ml-inactive="${hasInactive}" style="margin-bottom: 16px; padding: 12px; background: var(--ml-card-bg-alt, #252525); border-radius: 8px;">`;
             
+            // Add category header
+            html += `<div style="margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid #333;">
+                <span style="color: var(--ml-text-primary); font-size: 14px; font-weight: 600;">${displayName.toUpperCase()}</span>
+            </div>`;
+            
             if (hasActive) {
                 const activeStr = modelsObj.active.map(m => {
                     const fullName = m.name || m.original_path?.split(/[\/\\]/).pop() || 'Unknown';
@@ -1066,6 +1071,16 @@ class LinkerManagerDialog extends ComfyDialog {
         // Update button state in case there are active downloads
         this.updateDownloadAllButtonState();
         
+        // Always default to Missing Models tab when opening dialog
+        if (this.activeTab !== 'missing') {
+            // Manually switch tab without loading
+            this.activeTab = 'missing';
+            this.missingTab.classList.add('ml-tab-active');
+            this.loadedTab.classList.remove('ml-tab-active');
+            this.downloadAllButton.style.display = 'inline-flex';
+            this.autoResolveButton.style.display = 'inline-flex';
+        }
+        
         // Use provided workflow or fetch from current graph
         await this.loadWorkflowData(workflow);
     }
@@ -1241,6 +1256,12 @@ class LinkerManagerDialog extends ComfyDialog {
             </div>
         `;
         html += '<div style="display: flex; flex-direction: column; gap: 8px;">';
+
+        // Skip rendering if active tab is not "missing"
+        if (this.activeTab !== 'missing') {
+            container.innerHTML = '';
+            return;
+        }
 
         // Sort missing models: those with 100% confidence matches first, then others
         const sortedMissingModels = missingModels.sort((a, b) => {
