@@ -27,6 +27,7 @@ MODEL_EXTENSIONS = {
     ".pkl",
     ".sft",
     ".onnx",
+    ".gguf",
 }
 
 import re
@@ -59,6 +60,7 @@ NODE_TYPE_TO_CATEGORY_HINTS = {
     "LoraLoaderModelOnly": "loras",
     "LoraLoaderV2": "loras",
     "Lora Loader (LoraManager)": "loras",  # LoraManager custom node
+    "Power Lora Loader (rgthree)": "loras",  # rgthree's Power Lora Loader
     "UNETLoader": "diffusion_models",
     "ControlNetLoader": "controlnet",
     "ControlNetLoaderAdvanced": "controlnet",
@@ -66,6 +68,22 @@ NODE_TYPE_TO_CATEGORY_HINTS = {
     "UpscaleModelLoader": "upscale_models",
     "HypernetworkLoader": "hypernetworks",
     "EmbeddingLoader": "embeddings",
+    # LTX-Video nodes
+    "LTXVAudioVAELoader": "checkpoints",
+    "LowVRAMAudioVAELoader": "checkpoints",
+    "LTXVGemmaCLIPModelLoader": "text_encoders",
+}
+
+# Keys within dict-type widget values that contain model file references.
+# Some nodes (e.g. rgthree Power Lora Loader) store model info as objects like
+# {"on": true, "lora": "name.safetensors", "strength": 1.0} inside widgets_values.
+# Maps nested key name -> category hint.
+NESTED_MODEL_KEYS = {
+    "lora": "loras",
+    "ckpt_name": "checkpoints",
+    "checkpoint": "checkpoints",
+    "vae_name": "vae",
+    "control_net_name": "controlnet",
 }
 
 
@@ -277,6 +295,46 @@ def get_node_model_info(node: Dict[str, Any]) -> List[Dict[str, Any]]:
     # For each widget value, check if it looks like a model file or URN
     for idx, value in enumerate(widgets_values):
         if not is_model_filename(value):
+            # Check for dict-type widget values containing model references (e.g. Power Lora Loader)
+            # Some nodes store model info as objects like {"on": true, "lora": "name.safetensors", "strength": 1.0}
+            if isinstance(value, dict):
+                for nested_key, nested_category_hint in NESTED_MODEL_KEYS.items():
+                    nested_value = value.get(nested_key)
+                    if (
+                        not nested_value
+                        or not isinstance(nested_value, str)
+                        or not is_model_filename(nested_value)
+                    ):
+                        continue
+
+                    value_str = nested_value.strip()
+                    nested_categories = (
+                        [nested_category_hint] if nested_category_hint else None
+                    )
+
+                    resolved = try_resolve_model_path(value_str, nested_categories)
+                    if resolved:
+                        category, full_path = resolved
+                        exists = os.path.exists(full_path)
+                    else:
+                        category = nested_category_hint or "unknown"
+                        full_path = None
+                        exists = False
+
+                    model_refs.append(
+                        {
+                            "node_id": node_id,
+                            "node_type": node_type,
+                            "widget_index": idx,
+                            "original_path": value_str,
+                            "category": category,
+                            "full_path": full_path,
+                            "exists": exists,
+                            "is_urn": False,
+                            "connected": is_active,
+                            "nested_key": nested_key,  # Track nested key for updates
+                        }
+                    )
             continue
 
         value_str = str(value).strip()

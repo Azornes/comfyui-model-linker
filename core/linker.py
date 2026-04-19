@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 URL_PATTERN = re.compile(r'(https?://(?:huggingface\.co|civitai\.com)[^\s"\'<>\)\\]+)')
 
 # Model file extensions to look for
-MODEL_EXTENSIONS = (".safetensors", ".ckpt", ".pt", ".pth", ".bin", ".onnx")
+MODEL_EXTENSIONS = (".safetensors", ".ckpt", ".pt", ".pth", ".bin", ".onnx", ".gguf")
 
 
 def extract_workflow_urls(workflow_json: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
@@ -85,7 +85,7 @@ def extract_workflow_urls(workflow_json: Dict[str, Any]) -> Dict[str, Dict[str, 
 
     # 3. Extract model filenames via regex
     model_pattern = re.compile(
-        r"([\w\-\.%]+\.(?:safetensors|ckpt|pt|pth|bin|onnx))", re.IGNORECASE
+        r"([\w\-\.%]+\.(?:safetensors|ckpt|pt|pth|bin|onnx|gguf))", re.IGNORECASE
     )
     model_files_raw = model_pattern.findall(workflow_str)
 
@@ -334,7 +334,8 @@ def apply_resolution(
                 'widget_index': widget index,
                 'resolved_path': absolute path to resolved model,
                 'category': model category (optional),
-                'resolved_model': model dict from scanner (optional)
+                'resolved_model': model dict from scanner (optional),
+                'nested_key': nested key for dict-type widgets (optional)
             }
 
     Returns:
@@ -359,6 +360,9 @@ def apply_resolution(
             "original_lora_name": resolution.get(
                 "original_lora_name"
             ),  # Original lora name for LoraManager replacement
+            "nested_key": resolution.get(
+                "nested_key"
+            ),  # For dict-type widgets (e.g. Power Lora Loader)
         }
 
         # If resolved_model provided, extract path if needed

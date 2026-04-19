@@ -1069,8 +1069,8 @@ class LinkerManagerDialog extends ComfyDialog {
                 const parts = models.map(model => {
                     const fullName = model.name || model.original_path?.split(/[\/\\]/).pop() || 'Unknown';
                     let name = fullName;
-                    if (fullName.match(/\.(safetensors|ckpt|pt|pth|bin|pkl|sft|onnx)$/i)) {
-                        name = fullName.replace(/\.(safetensors|ckpt|pt|pth|bin|pkl|sft|onnx)$/i, '');
+                    if (fullName.match(/\.(safetensors|ckpt|pt|pth|bin|pkl|sft|onnx|gguf)$/i)) {
+                        name = fullName.replace(/\.(safetensors|ckpt|pt|pth|bin|pkl|sft|onnx|gguf)$/i, '');
                     }
                     const strength = model.strength !== null && model.strength !== undefined 
                         ? model.strength.toFixed(2) 
@@ -1123,7 +1123,7 @@ class LinkerManagerDialog extends ComfyDialog {
             if (hasActive) {
                 const activeStr = modelsObj.active.map(m => {
                     const fullName = m.name || m.original_path?.split(/[\/\\]/).pop() || 'Unknown';
-                    let name = fullName.replace(/\.(safetensors|ckpt|pt|pth|bin|pkl|sft|onnx)$/i, '');
+                    let name = fullName.replace(/\.(safetensors|ckpt|pt|pth|bin|pkl|sft|onnx|gguf)$/i, '');
                     const strength = m.strength !== null && m.strength !== undefined ? m.strength.toFixed(2) : '1.00';
                     return `<${displayName}:${name}:${strength}>`;
                 }).join(' ');
@@ -1137,7 +1137,7 @@ class LinkerManagerDialog extends ComfyDialog {
                 
                 for (const model of modelsObj.active) {
                     const fullName = model.name || model.original_path?.split(/[\/\\]/).pop() || 'Unknown';
-                    const name = fullName.replace(/\.(safetensors|ckpt|pt|pth|bin|pkl|sft|onnx)$/i, '');
+                    const name = fullName.replace(/\.(safetensors|ckpt|pt|pth|bin|pkl|sft|onnx|gguf)$/i, '');
                     const strength = model.strength !== null && model.strength !== undefined ? model.strength.toFixed(2) : null;
                     html += `<span class="ml-model-chip">${name}${strength !== null ? `<span class="ml-model-chip-strength">${strength}</span>` : ''}</span>`;
                 }
@@ -1147,7 +1147,7 @@ class LinkerManagerDialog extends ComfyDialog {
             if (hasInactive) {
                 const inactiveStr = modelsObj.inactive.map(m => {
                     const fullName = m.name || m.original_path?.split(/[\/\\]/).pop() || 'Unknown';
-                    let name = fullName.replace(/\.(safetensors|ckpt|pt|pth|bin|pkl|sft|onnx)$/i, '');
+                    let name = fullName.replace(/\.(safetensors|ckpt|pt|pth|bin|pkl|sft|onnx|gguf)$/i, '');
                     const strength = m.strength !== null && m.strength !== undefined ? m.strength.toFixed(2) : '1.00';
                     return `<${displayName}:${name}:${strength}>`;
                 }).join(' ');
@@ -1161,7 +1161,7 @@ class LinkerManagerDialog extends ComfyDialog {
                 
                 for (const model of modelsObj.inactive) {
                     const fullName = model.name || model.original_path?.split(/[\/\\]/).pop() || 'Unknown';
-                    const name = fullName.replace(/\.(safetensors|ckpt|pt|pth|bin|pkl|sft|onnx)$/i, '');
+                    const name = fullName.replace(/\.(safetensors|ckpt|pt|pth|bin|pkl|sft|onnx|gguf)$/i, '');
                     const strength = model.strength !== null && model.strength !== undefined ? model.strength.toFixed(2) : null;
                     html += `<span class="ml-model-chip">${name}${strength !== null ? `<span class="ml-model-chip-strength">${strength}</span>` : ''}</span>`;
                 }

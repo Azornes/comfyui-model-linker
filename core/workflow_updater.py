@@ -312,9 +312,18 @@ def update_model_path(
         relative_path = resolved_path
 
     # Update the widget value
-    widgets_values[widget_index] = relative_path
-
-    logging.debug(f"Updated node {node_id}, widget {widget_index} to: {relative_path}")
+    # Handle nested dict values (e.g. Power Lora Loader with {"on": true, "lora": "name.safetensors", "strength": 1.0})
+    nested_key = mapping.get("nested_key") if mapping else None
+    if nested_key and isinstance(widgets_values[widget_index], dict):
+        widgets_values[widget_index][nested_key] = relative_path
+        logging.debug(
+            f"Updated node {node_id}, widget {widget_index}[{nested_key}] to: {relative_path}"
+        )
+    else:
+        widgets_values[widget_index] = relative_path
+        logging.debug(
+            f"Updated node {node_id}, widget {widget_index} to: {relative_path}"
+        )
     return True
 
 
