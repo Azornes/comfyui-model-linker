@@ -1413,6 +1413,75 @@ class LinkerManagerDialog extends ComfyDialog {
         } catch (e) { /* ignore */ }
     }
 
+    // Update selected bar for a specific missing model slot
+    updateSelectedBarForMissing(missing) {
+        if (!missing) return;
+        const nodeId = missing.node_id;
+        const widgetIndex = missing.widget_index;
+        const subgraphId = missing.subgraph_id || '';
+        const isTopLevel = missing.is_top_level !== false;
+        const key = `${nodeId}:${widgetIndex}:${subgraphId}:${isTopLevel ? 'T' : 'F'}`;
+        
+        const selectedBar = document.getElementById(`selected-bar-${nodeId}-${widgetIndex}`);
+        if (!selectedBar) return;
+        
+        // Find selection for this slot
+        let selection = null;
+        let selectionIdx = -1;
+        if (this.pendingIndex.has(key)) {
+            const idx = this.pendingIndex.get(key);
+            if (idx >= 0 && idx < this.pendingResolutions.length) {
+                selection = this.pendingResolutions[idx];
+                selectionIdx = idx;
+            }
+        }
+        
+        if (!selection) {
+            selectedBar.style.display = 'none';
+            selectedBar.innerHTML = '';
+            return;
+        }
+        
+        // Build selected bar content
+        const label = selection.resolved_model?.relative_path || selection.resolved_model?.filename || selection.resolved_path || '';
+        const resolveBtnId = `selected-remove-${nodeId}-${widgetIndex}`;
+        
+        selectedBar.innerHTML = `<div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">`;
+        selectedBar.innerHTML += `<span style="color: #4CAF50; font-weight: 600;">✓ Selected:</span>`;
+        selectedBar.innerHTML += `<code style="flex: 1; overflow: hidden; text-overflow: ellipsis;">${label}</code>`;
+        selectedBar.innerHTML += `<button id="${resolveBtnId}" class="ml-btn ml-btn-secondary ml-btn-sm" style="padding: 2px 8px;">Remove</button>`;
+        selectedBar.innerHTML += `</div>`;
+        selectedBar.style.display = 'block';
+        
+        // Wire remove button - use key-based removal
+        const removeBtn = selectedBar.querySelector(`#${resolveBtnId}`);
+        if (removeBtn) {
+            removeBtn.addEventListener('click', () => {
+                this.removeQueuedByKey(key);
+            });
+        }
+    }
+
+    // Remove queued by key (more reliable than index)
+    removeQueuedByKey(key) {
+        if (!key || !this.pendingIndex.has(key)) return;
+        
+        // Find and remove the item with this key
+        const idx = this.pendingIndex.get(key);
+        if (idx >= 0 && idx < this.pendingResolutions.length) {
+            const r = this.pendingResolutions[idx];
+            // Update the selected bar before removing
+            const m = { node_id: r.node_id, widget_index: r.widget_index, subgraph_id: r.subgraph_id, is_top_level: r.is_top_level };
+            
+            // Remove from array
+            this.pendingResolutions.splice(idx, 1);
+            this.rebuildPendingIndex();
+            this.updateSelectedBarForMissing(m);
+            this.updateApplyPendingButton?.();
+            this.updateQueuePanel();
+        }
+    }
+
     // Rebuild pending index after modification
     rebuildPendingIndex() {
         this.pendingIndex = new Map();
@@ -2016,16 +2085,28 @@ class LinkerManagerDialog extends ComfyDialog {
                     // Remove any existing listeners to prevent duplicates
                     resolveButton.onclick = null;
                     resolveButton.addEventListener('click', () => {
-                        console.log('>>> Link button clicked:', buttonId, missing.original_path, '->', match.model?.filename);
-                        this.resolveModel(missing, match.model).catch(err => {
-                            console.error('resolveModel error:', err);
-                            this.showNotification('Link failed: ' + err.message, 'error');
-                        });
+                        console.log('>>> Queue button clicked:', buttonId, missing.original_path, '->', match.model?.filename);
+                        // Queue the selection instead of directly applying
+                        this.queueResolution(missing, match.model);
                     });
                 } else {
                     console.warn('Button not found:', buttonId);
                 }
             });
+            
+            // Attach alternative (other matches below 100%) button listeners
+            if (otherMatches && otherMatches.length > 0) {
+                for (let mIdx = 0; mIdx < otherMatches.length; mIdx++) {
+                    const match = otherMatches[mIdx];
+                    const altBtnId = `resolve-alt-${missingIndex}-${missing.node_id}-${missing.widget_index}-${mIdx}`;
+                    const altBtn = container.querySelector(`#${altBtnId}`);
+                    if (altBtn) {
+                        altBtn.addEventListener('click', () => {
+                            this.queueResolution(missing, match.model);
+                        });
+                    }
+                }
+            }
             
             // Attach download button listener
             const downloadBtnId = `download-${missing.node_id}-${missing.widget_index}`;
@@ -2054,56 +2135,88 @@ class LinkerManagerDialog extends ComfyDialog {
                 });
             }
             
-            // Wire up all-models search + dropdown
-            const allSearchId = `search-all-${missing.node_id}-${missing.widget_index}`;
-            const selectAllId = `select-all-${missing.node_id}-${missing.widget_index}`;
-            const resolveAllId = `resolve-all-${missing.node_id}-${missing.widget_index}`;
-            const searchEl = container.querySelector(`#${allSearchId}`);
-            const selectAllEl = container.querySelector(`#${selectAllId}`);
-            const resolveAllBtn = container.querySelector(`#${resolveAllId}`);
+            // Wire up all-models search + dropdown (combo-style)
+            const comboId = `combo-${missing.node_id}-${missing.widget_index}`;
+            const comboInput = container.querySelector(`#combo-input-${comboId}`);
+            const comboList = container.querySelector(`#combo-list-${comboId}`);
+            const comboRefresh = container.querySelector(`#combo-refresh-${comboId}`);
 
             const allModels = Array.isArray(this.allModels) ? this.allModels : [];
             const buildLabel = (m) => `${m.category ? m.category + ': ' : ''}${m.relative_path || m.filename || ''}`;
+            const getFolder = (m) => m.path || m.base_directory || '';
 
-            const populateAllOptions = (filterText) => {
-                if (!selectAllEl) return;
+            // Populate dropdown with filtered models
+            const populateComboOptions = (filterText, highlightIdx = -1) => {
+                if (!comboList) return;
                 const f = (filterText || '').toLowerCase();
                 const filtered = f
                     ? allModels.filter(m => buildLabel(m).toLowerCase().includes(f))
-                    : allModels;
-                // Build options HTML
-                let opts = '';
+                    : allModels.slice();  // Copy to avoid mutation
+                
+                let html = '';
                 for (let i = 0; i < filtered.length; i++) {
                     const m = filtered[i];
                     const label = buildLabel(m);
-                    // use index in allModels for value; keep stable mapping
-                    const valueIndex = allModels.indexOf(m);
-                    if (valueIndex >= 0) {
-                        opts += `<option value="${valueIndex}">${label}</option>`;
+                    const folder = getFolder(m);
+                    const isHighlighted = i === highlightIdx;
+                    const folderDisplay = folder ? folder.replace(/\\/g, '/').replace(/:/, '') : '';
+                    html += `<div data-idx="${allModels.indexOf(m)}" style="padding: 6px; cursor:pointer; ${isHighlighted ? 'background: rgba(0,122,204,0.25);' : ''}">`;
+                    html += `<div style="display:flex; align-items:center; gap:6px;">`;
+                    html += `<code style="flex: 1 1 0%; white-space: nowrap;">${label}</code>`;
+                    html += `</div>`;
+                    if (folderDisplay) {
+                        html += `<div style="font-size: 10px; color: #888; opacity: 0.8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${folderDisplay}">📁 ${folderDisplay}</div>`;
                     }
+                    html += `</div>`;
                 }
-                selectAllEl.innerHTML = opts;
+                comboList.innerHTML = html;
+                
+                // Add click listeners to options
+                comboList.querySelectorAll('div[data-idx]').forEach(el => {
+                    el.addEventListener('click', () => {
+                        const idx = parseInt(el.dataset.idx, 10);
+                        if (!isNaN(idx) && idx >= 0 && idx < allModels.length) {
+                            const chosenModel = allModels[idx];
+                            if (chosenModel) {
+                                this.queueResolution(missing, chosenModel);
+                            }
+                        }
+                    });
+                });
             };
 
-            if (selectAllEl) {
-                populateAllOptions('');
+            // Initial populate
+            if (comboList) {
+                populateComboOptions('');
             }
-            if (searchEl) {
+
+            // Filter input with debounce
+            if (comboInput) {
                 const debouncedFilter = this.debounce(() => {
-                    populateAllOptions(searchEl.value);
-                }, 250);
-                searchEl.addEventListener('input', debouncedFilter);
+                    populateComboOptions(comboInput.value);
+                }, 200);
+                comboInput.addEventListener('input', debouncedFilter);
+                
+                // Show dropdown on focus
+                comboInput.addEventListener('focus', () => {
+                    if (comboList) comboList.style.display = 'block';
+                    populateComboOptions(comboInput.value);
+                });
+                
+                // Close on blur (with delay to allow click)
+                comboInput.addEventListener('blur', () => {
+                    setTimeout(() => {
+                        if (comboList) comboList.style.display = 'none';
+                    }, 200);
+                });
             }
-            if (resolveAllBtn && selectAllEl) {
-                resolveAllBtn.addEventListener('click', () => {
-                    const idx = parseInt(selectAllEl.value, 10);
-                    if (!isNaN(idx) && idx >= 0 && idx < allModels.length) {
-                        const chosenModel = allModels[idx];
-                        if (chosenModel) {
-                            // Queue the resolution instead of direct apply
-                            this.queueResolution(missing, chosenModel);
-                        }
-                    }
+
+            // Refresh button - reload all models
+            if (comboRefresh) {
+                comboRefresh.addEventListener('click', async () => {
+                    this.allModels = null;  // Force reload
+                    await this.ensureAllModelsLoaded();
+                    populateComboOptions(comboInput?.value || '');
                 });
             }
         });
@@ -2180,6 +2293,10 @@ class LinkerManagerDialog extends ComfyDialog {
         // Removed - filename is already shown in title
         html += `</div>`;
         
+        // Selected bar - shows if this slot has a queued selection (BELOW card header)
+        const selectedBarId = `selected-bar-${missing.node_id}-${missing.widget_index}`;
+        html += `<div id="${selectedBarId}" class="model-linker-selected" style="display: none; margin: 8px 0; padding: 8px; background: rgba(0, 122, 204, 0.15); border: 1px solid rgba(0, 122, 204, 0.4); border-radius: 4px;"></div>`;
+        
         // Two-column layout
         html += `<div class="ml-columns">`;
         
@@ -2222,12 +2339,14 @@ class LinkerManagerDialog extends ComfyDialog {
                 html += `<div class="ml-no-matches" style="cursor: pointer; color: #2196F3;" onclick="document.getElementById('${matchId}').style.display = document.getElementById('${matchId}').style.display === 'none' ? 'block' : 'none'; this.textContent = this.textContent === '${otherMatches.length} other matches below 100%' ? 'Hide alternatives' : '${otherMatches.length} other matches below 100%'">${otherMatches.length} other match${otherMatches.length > 1 ? 'es' : ''} below 100%</div>`;
                 // Hidden container with other matches
                 html += `<div id="${matchId}" style="display: none; flex-direction: column; gap: 4px; margin-top: 8px;">`;
-                for (const match of otherMatches) {
+                for (let mIdx = 0; mIdx < otherMatches.length; mIdx++) {
+                    const match = otherMatches[mIdx];
                     const confClass = match.confidence >= 70 ? 'ml-badge-medium' : 'ml-badge-low';
+                    const altBtnId = `resolve-alt-${missingIndex}-${missing.node_id}-${missing.widget_index}-${mIdx}`;
                     html += `<div class="ml-match-row" style="padding: 4px; background: var(--ml-bg-secondary); border-radius: 4px;">`;
                     html += `<span class="ml-badge ${confClass}">${match.confidence}%</span>`;
                     html += `<span class="ml-match-filename" title="${match.path || match.filename}" style="flex: 1; overflow: hidden; text-overflow: ellipsis;">${match.filename || match.path?.split(/[/\\]/).pop()}</span>`;
-                    html += `<button class="ml-btn ml-btn-secondary ml-btn-sm" onclick="document.getElementById('resolve-${missing.node_id}-${missing.widget_index}').click()">🔗 Link</button>`;
+                    html += `<button id="${altBtnId}" class="ml-btn ml-btn-secondary ml-btn-sm">🔗 Link</button>`;
                     html += `</div>`;
                 }
                 html += `</div>`;
@@ -2238,15 +2357,15 @@ class LinkerManagerDialog extends ComfyDialog {
             html += `<div class="ml-no-matches">No local matches found</div>`;
         }
         
-        // Add all-models search picker
-        const searchId = `search-all-${missing.node_id}-${missing.widget_index}`;
-        const selectAllId = `select-all-${missing.node_id}-${missing.widget_index}`;
-        const resolveAllId = `resolve-all-${missing.node_id}-${missing.widget_index}`;
-        html += `<div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--ml-border);">`;
-        html += `<div style="margin-bottom: 8px; font-size: 12px; color: var(--ml-text-muted);">Search all models:</div>`;
-        html += `<input id="${searchId}" type="text" placeholder="type to filter..." style="width: 100%; padding: 6px; margin-bottom: 6px; background: var(--comfy-input-bg); color: var(--input-text); border: 1px solid var(--border-color); border-radius: 4px;" />`;
-        html += `<select id="${selectAllId}" class="model-linker-select" size="6" multiple style="width: 100%; padding: 4px; background: var(--comfy-input-bg); color: var(--input-text); border: 1px solid var(--border-color); border-radius: 4px; margin-bottom: 6px;"></select>`;
-        html += `<button id="${resolveAllId}" class="ml-btn ml-btn-primary ml-btn-sm" style="width: 100%;">Queue Selection</button>`;
+        // Add all-models search picker - combo-style dropdown
+        const comboId = `combo-${missing.node_id}-${missing.widget_index}`;
+        html += `<div style="position: relative; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--ml-border);">`;
+        html += `<div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px;">`;
+        html += `<label style="opacity: 0.9; font-size: 12px; color: var(--ml-text-muted);">Model:</label>`;
+        html += `<input id="combo-input-${comboId}" type="text" placeholder="type to filter..." style="flex: 1; padding: 6px; background: var(--comfy-input-bg); color: var(--input-text); border: 1px solid var(--border-color); border-radius: 4px; font-size: 13px;">`;
+        html += `<button id="combo-refresh-${comboId}" title="Refresh model list" class="ml-btn ml-btn-secondary ml-btn-sm" style="padding: 4px 8px;">⟳</button>`;
+        html += `</div>`;
+        html += `<div id="combo-list-${comboId}" style="position: absolute; top: 100%; left: 55px; background: var(--comfy-input-bg, #2f2f2f); border: 1px solid var(--border-color); border-radius: 4px; max-height: 280px; overflow: auto; display: none; z-index: 100000; right: auto; width: calc(100% - 60px);"></div>`;
         html += `</div>`;
         
         html += `</div>`; // End left column
