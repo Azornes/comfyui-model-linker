@@ -15,9 +15,15 @@ class LinkerManagerDialog extends ComfyDialog {
         super();
         this.currentWorkflow = null;
         this.missingModels = [];
+        this.allModels = null; // list of all available models for dropdown
+        this.pendingResolutions = [];
+        this.pendingIndex = new Map(); // key -> index in pendingResolutions
         this.activeDownloads = {};  // Track active downloads
         this.boundHandleOutsideClick = this.handleOutsideClick.bind(this);
         this.activeTab = 'missing';  // Default tab
+        this.fullscreen = false;
+        this._dragging = false;
+        this._dragStart = null;
         
         // Inject global styles for the redesigned UI
         this.injectStyles();
@@ -39,6 +45,7 @@ class LinkerManagerDialog extends ComfyDialog {
         
         // Create dialog element using $el
         this.element = $el("div.comfy-modal", {
+            id: "model-linker-modal",
             parent: document.body,
             style: {
                 position: "fixed",
@@ -57,7 +64,11 @@ class LinkerManagerDialog extends ComfyDialog {
                 zIndex: "99999",
                 boxShadow: "0 4px 20px rgba(0,0,0,0.8)",
                 display: "none",
-                flexDirection: "column"
+                flexDirection: "column",
+                resize: "both",
+                overflow: "hidden",
+                minWidth: "640px",
+                minHeight: "420px"
             }
         }, [
             this.createHeader(),
@@ -692,39 +703,243 @@ class LinkerManagerDialog extends ComfyDialog {
                     backgroundColor: "var(--comfy-menu-bg, #202020)"
                 }
             }, [
-                $el("h2", {
-                    textContent: "🔗 Model Linker",
-                    style: {
-                        margin: "0",
-                        color: "var(--input-text)",
-                        fontSize: "18px",
-                        fontWeight: "600"
-                    }
-                }),
-                $el("button", {
-                    textContent: "×",
-                    onclick: () => this.close(),
-                    style: {
-                        background: "none",
-                        border: "none",
-                        fontSize: "24px",
-                        cursor: "pointer",
-                        color: "var(--input-text)",
-                        padding: "0",
-                        width: "30px",
-                        height: "30px",
-                        borderRadius: "4px",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center"
-                    }
-                })
+                $el("div", { style: { display: "flex", gap: "8px", alignItems: "center" } }, [
+                    $el("div", {
+                        id: "model-linker-drag-handle",
+                        title: "Drag window",
+                        ondragstart: (e) => e.preventDefault(),
+                        style: {
+                            cursor: "grab",
+                            userSelect: "none",
+                            border: "1px solid var(--border-color)",
+                            borderRadius: "4px",
+                            padding: "0 6px",
+                            height: "24px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            opacity: "0.9"
+                        }
+                    }, [
+                        $el("span", { textContent: "⠿" })
+                    ]),
+                    $el("h2", {
+                        textContent: "🔗 Model Linker",
+                        style: {
+                            margin: "0",
+                            color: "var(--input-text)",
+                            fontSize: "18px",
+                            fontWeight: "600"
+                        }
+                    })
+                ]),
+                $el("div", { style: { display: "flex", gap: "8px", alignItems: "center" } }, [
+                    $el("button", {
+                        id: "model-linker-fullscreen-toggle",
+                        title: "Toggle full screen",
+                        textContent: "⛶",
+                        onclick: () => this.toggleFullScreen(),
+                        style: {
+                            background: "none",
+                            border: "1px solid var(--border-color)",
+                            fontSize: "16px",
+                            cursor: "pointer",
+                            color: "var(--input-text)",
+                            padding: "2px 8px",
+                            minWidth: "32px",
+                            height: "30px",
+                            borderRadius: "4px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center"
+                        }
+                    }),
+                    $el("button", {
+                        textContent: "×",
+                        onclick: () => this.close(),
+                        style: {
+                            background: "none",
+                            border: "none",
+                            fontSize: "24px",
+                            cursor: "pointer",
+                            color: "var(--input-text)",
+                            padding: "0",
+                            width: "30px",
+                            height: "30px",
+                            borderRadius: "4px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center"
+                        }
+                    })
+                ])
             ]),
             $el("div.ml-tabs", {}, [
                 this.missingTab,
                 this.loadedTab
             ])
         ]);
+    }
+    
+    // Toggle full screen mode for the dialog
+    toggleFullScreen() {
+        this.setFullScreen(!this.fullscreen);
+    }
+
+    setFullScreen(enable) {
+        this.fullscreen = !!enable;
+        const el = this.element;
+        if (!el) return;
+        const btn = document.getElementById('model-linker-fullscreen-toggle');
+        if (enable) {
+            // Save current size
+            try {
+                const rect = el.getBoundingClientRect();
+                localStorage.setItem('model_linker_modal_size_before_fs', JSON.stringify({ w: Math.round(rect.width), h: Math.round(rect.height) }));
+            } catch (e) {}
+            el.style.top = '0';
+            el.style.left = '0';
+            el.style.transform = 'none';
+            el.style.width = '100vw';
+            el.style.height = '100vh';
+            el.style.maxWidth = '100vw';
+            el.style.maxHeight = '100vh';
+            el.style.borderRadius = '0';
+            el.style.resize = 'none';
+            if (btn) btn.textContent = '🗗';
+            try { localStorage.setItem('model_linker_modal_fullscreen', '1'); } catch (e) {}
+        } else {
+            // Restore centered sizing
+            el.style.maxWidth = '95vw';
+            el.style.maxHeight = '95vh';
+            el.style.borderRadius = '8px';
+            el.style.resize = 'both';
+            // Restore saved pre-FS size if available
+            let wh = null;
+            try { wh = JSON.parse(localStorage.getItem('model_linker_modal_size_before_fs') || 'null'); } catch (e) {}
+            if (wh && wh.w && wh.h) {
+                el.style.width = `${wh.w}px`;
+                el.style.height = `${wh.h}px`;
+            } else {
+                el.style.width = '1100px';
+                el.style.height = '700px';
+            }
+            // Restore last known position if available, else center
+            try {
+                const pos = JSON.parse(localStorage.getItem('model_linker_modal_pos') || 'null');
+                if (pos && Number.isFinite(pos.top) && Number.isFinite(pos.left)) {
+                    el.style.top = `${pos.top}px`;
+                    el.style.left = `${pos.left}px`;
+                    el.style.transform = 'none';
+                } else {
+                    el.style.top = '50%';
+                    el.style.left = '50%';
+                    el.style.transform = 'translate(-50%, -50%)';
+                }
+            } catch (e) {
+                el.style.top = '50%';
+                el.style.left = '50%';
+                el.style.transform = 'translate(-50%, -50%)';
+            }
+            if (btn) btn.textContent = '⛶';
+            try { localStorage.setItem('model_linker_modal_fullscreen', '0'); } catch (e) {}
+        }
+    }
+
+    // Begin window drag
+    startDrag(e) {
+        try {
+            const el = this.element;
+            if (!el) return;
+            const rect = el.getBoundingClientRect();
+            // Switch to absolute top/left (no transform) before dragging
+            el.style.top = `${rect.top}px`;
+            el.style.left = `${rect.left}px`;
+            el.style.transform = 'none';
+            this._dragging = true;
+            this._dragStart = {
+                x: e.clientX,
+                y: e.clientY,
+                top: rect.top,
+                left: rect.left
+            };
+            // Prevent text selection while dragging
+            this._prevUserSelect = document.body.style.userSelect;
+            document.body.style.userSelect = 'none';
+            // Attach listeners
+            this._onMouseMove = (ev) => this.onDrag(ev);
+            this._onMouseUp = () => this.endDrag();
+            document.addEventListener('mousemove', this._onMouseMove);
+            document.addEventListener('mouseup', this._onMouseUp, { once: true });
+        } catch (err) { /* ignore */ }
+    }
+
+    onDrag(e) {
+        if (!this._dragging || !this._dragStart) return;
+        const el = this.element;
+        if (!el) return;
+        const dx = e.clientX - this._dragStart.x;
+        const dy = e.clientY - this._dragStart.y;
+        let top = this._dragStart.top + dy;
+        let left = this._dragStart.left + dx;
+        // Clamp to viewport
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+        const w = el.offsetWidth;
+        const h = el.offsetHeight;
+        const pad = 4; // small padding
+        left = Math.max(-w + pad, Math.min(vw - pad, left));
+        top = Math.max(-h + pad, Math.min(vh - pad, top));
+        el.style.top = `${Math.round(top)}px`;
+        el.style.left = `${Math.round(left)}px`;
+    }
+
+    endDrag() {
+        if (!this._dragging) return;
+        this._dragging = false;
+        document.removeEventListener('mousemove', this._onMouseMove);
+        // Persist position
+        try {
+            const el = this.element;
+            const rect = el.getBoundingClientRect();
+            localStorage.setItem('model_linker_modal_pos', JSON.stringify({ top: Math.round(rect.top), left: Math.round(rect.left) }));
+        } catch (e) { /* ignore */ }
+        // Restore selection
+        try { document.body.style.userSelect = this._prevUserSelect || ''; } catch (e) {}
+    }
+
+    /**
+     * Simple debounce helper
+     */
+    debounce(callback, wait = 250) {
+        let t = null;
+        return (...args) => {
+            if (t) clearTimeout(t);
+            t = setTimeout(() => {
+                callback.apply(this, args);
+            }, wait);
+        };
+    }
+
+    /**
+     * Ensure all models are loaded for the dropdown.
+     */
+    async ensureAllModelsLoaded() {
+        if (this.allModels && this.allModels.length) return;
+        try {
+            const resp = await api.fetchApi('/model_linker/models');
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const models = await resp.json();
+            const list = Array.isArray(models) ? models : [];
+            // Build labels and sort alphabetically
+            this.allModels = list.map((m) => ({
+                ...m,
+                __label: `${m.category ? m.category + ': ' : ''}${m.relative_path || m.filename || ''}`
+            })).sort((a, b) => (a.__label || '').localeCompare(b.__label || ''));
+        } catch (e) {
+            console.warn('Model Linker: could not load all models', e);
+            this.allModels = [];
+        }
     }
 
     switchTab(tab) {
@@ -735,12 +950,28 @@ class LinkerManagerDialog extends ComfyDialog {
             this.loadedTab.classList.remove('ml-tab-active');
             this.downloadAllButton.style.display = 'inline-flex';
             this.autoResolveButton.style.display = 'inline-flex';
+            this.applyPendingBtn.style.display = 'inline-flex';
+            // Show queue panel
+            if (this.queueElement && !this.queueCollapsed) {
+                this.queueElement.style.display = '';
+            }
+            if (this.splitterElement) {
+                this.splitterElement.style.display = '';
+            }
             this.loadWorkflowData();
         } else {
             this.missingTab.classList.remove('ml-tab-active');
             this.loadedTab.classList.add('ml-tab-active');
             this.downloadAllButton.style.display = 'none';
             this.autoResolveButton.style.display = 'none';
+            this.applyPendingBtn.style.display = 'none';
+            // Hide queue panel in loaded models tab
+            if (this.queueElement) {
+                this.queueElement.style.display = 'none';
+            }
+            if (this.splitterElement) {
+                this.splitterElement.style.display = 'none';
+            }
             this.loadLoadedModels();
         }
     }
@@ -961,17 +1192,400 @@ class LinkerManagerDialog extends ComfyDialog {
     }
     
     createContent() {
+        // Wrap the body in a two-column layout: left = items, right = queued panel
+        const body = $el("div", {
+            id: "model-linker-body",
+            style: {
+                display: "flex",
+                gap: "12px",
+                padding: "16px",
+                flex: "1",
+                minHeight: "0",
+                alignItems: "stretch",
+                position: "relative"
+            }
+        });
+
         this.contentElement = $el("div.ml-scrollable", {
             id: "model-linker-content",
             style: {
-                padding: "20px",
                 overflowY: "auto",
                 flex: "1",
                 minHeight: "0",
                 backgroundColor: "var(--ml-bg, #222)"
             }
         });
-        return this.contentElement;
+
+        this.queueElement = $el("div", {
+            id: "model-linker-queue",
+            style: {
+                width: "320px",
+                minWidth: "240px",
+                maxWidth: "70%",
+                borderLeft: "1px solid var(--border-color)",
+                paddingLeft: "12px",
+                display: "flex",
+                flexDirection: "column"
+            }
+        }, [
+            this.createQueuePanel()
+        ]);
+
+        // Splitter between content and queue
+        this.splitterElement = $el("div", {
+            id: "model-linker-splitter",
+            title: "Drag to resize panels",
+            style: {
+                cursor: "col-resize",
+                width: "6px",
+                minWidth: "6px",
+                background: "var(--border-color)",
+                opacity: "0.4",
+                borderRadius: "3px"
+            },
+            ondragstart: (e) => e.preventDefault()
+        });
+
+        body.appendChild(this.contentElement);
+        body.appendChild(this.splitterElement);
+        body.appendChild(this.queueElement);
+
+        // Restore saved queue width and wire splitter
+        try {
+            const savedSplit = localStorage.getItem('model_linker_split_w');
+            if (savedSplit) {
+                const w = parseInt(savedSplit, 10);
+                if (!isNaN(w) && w > 0) {
+                    this.queueElement.style.width = `${w}px`;
+                }
+            }
+        } catch (e) { }
+
+        try {
+            const onSplitMouseDown = (e) => this.startSplitDrag(e);
+            this.splitterElement.addEventListener('mousedown', onSplitMouseDown);
+            this._splitterMouseDown = onSplitMouseDown;
+        } catch (e) { }
+        
+        // Toggle icon always visible
+        try {
+            this.queueToggleIcon = $el("button", {
+                id: "queue-toggle-icon",
+                title: "Collapse queue",
+                onclick: () => this.toggleQueueCollapsed(),
+                style: {
+                    position: "absolute",
+                    top: "50%",
+                    right: "6px",
+                    transform: "translateY(-50%)",
+                    zIndex: "1000",
+                    padding: "2px 6px",
+                    border: "1px solid var(--border-color)",
+                    borderRadius: "4px",
+                    background: "var(--comfy-input-bg, #2f2f2f)",
+                    cursor: "pointer",
+                    opacity: "0.9"
+                }
+            }, [document.createTextNode('⮜')]);
+            body.appendChild(this.queueToggleIcon);
+            this.updateQueueToggleIcon();
+        } catch (e) { }
+        
+        // Restore queue collapsed state
+        try {
+            const col = localStorage.getItem('model_linker_queue_collapsed');
+            if (col === '1') this.setQueueCollapsed(true);
+        } catch (e) { }
+        
+        return body;
+    }
+    
+    createQueuePanel() {
+        // Header row with title and clear button
+        this.queueHeader = $el("div", {
+            style: {
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: "8px"
+            }
+        }, [
+            $el("div", { id: "queue-title", textContent: "Queued Selections (0)", style: { fontWeight: "600" } }),
+            $el("div", { style: { display: "flex", gap: "6px" } }, [
+                $el("button", {
+                    id: "queue-toggle",
+                    className: "ml-btn ml-btn-secondary ml-btn-sm",
+                    textContent: "Collapse",
+                    onclick: () => this.toggleQueueCollapsed(),
+                    style: { padding: "4px 8px" }
+                }),
+                $el("button", {
+                    id: "queue-clear",
+                    className: "ml-btn ml-btn-secondary ml-btn-sm",
+                    textContent: "Clear All",
+                    onclick: () => this.clearAllQueued(),
+                    style: { padding: "4px 8px" }
+                })
+            ])
+        ]);
+
+        // Scrollable list
+        this.queueList = $el("div", {
+            id: "queue-list",
+            style: {
+                overflowY: "auto",
+                flex: "1",
+                minHeight: "0",
+                border: "1px solid var(--border-color)",
+                borderRadius: "4px",
+                padding: "8px",
+                background: "var(--comfy-input-bg, #2f2f2f)"
+            }
+        });
+
+        const panel = $el("div", { style: { display: "flex", flexDirection: "column", minHeight: "0", flex: "1 1 auto" } }, [this.queueHeader, this.queueList]);
+        return panel;
+    }
+
+    updateQueuePanel() {
+        if (!this.queueList || !this.queueHeader) return;
+        const list = Array.isArray(this.pendingResolutions) ? this.pendingResolutions : [];
+        // Update title count
+        const title = this.queueHeader.querySelector('#queue-title');
+        if (title) title.textContent = `Queued Selections (${list.length})`;
+        const toggleBtn = this.queueHeader.querySelector('#queue-toggle');
+        if (toggleBtn) toggleBtn.textContent = this.queueCollapsed ? 'Expand' : 'Collapse';
+
+        if (!list.length) {
+            this.queueList.innerHTML = '<div style="opacity:0.7;">No selections queued.</div>';
+            return;
+        }
+
+        let html = '<div style="display:flex; flex-direction:column; gap:6px;">';
+        for (let i = 0; i < list.length; i++) {
+            const r = list[i];
+            const label = (r.resolved_model?.relative_path || r.resolved_model?.filename || r.resolved_path || '').toString();
+            const nodeLabel = r.node_label || r.node_type || (r.subgraph_id ? 'Subgraph' : 'Node');
+            const orig = (r.original_path || '').toString();
+            const rmId = `queue-remove-${i}`;
+            html += `<div style="border:1px solid var(--border-color); border-radius:4px; padding:6px; background: rgba(255,255,255,0.02);">`;
+            html += `<div style="font-weight:600;">${nodeLabel} #${r.node_id}</div>`;
+            html += `<div style="font-size:12px; opacity:0.9;">Original: <code>${orig}</code></div>`;
+            html += `<div style="font-size:12px;">Selected: <code>${label}</code></div>`;
+            html += `<div style="margin-top:6px;"><button id="${rmId}" class="ml-btn ml-btn-secondary ml-btn-sm" style="padding:2px 8px;">Remove</button></div>`;
+        }
+        html += '</div>';
+        this.queueList.innerHTML = html;
+
+        // Wire remove buttons
+        for (let i = 0; i < list.length; i++) {
+            const rmId = `queue-remove-${i}`;
+            const btn = this.queueList.querySelector(`#${rmId}`);
+            if (btn) {
+                btn.addEventListener('click', () => this.removeQueuedByIndex(i));
+            }
+        }
+    }
+
+    // Remove queued by index
+    removeQueuedByIndex(i) {
+        const list = Array.isArray(this.pendingResolutions) ? this.pendingResolutions : [];
+        if (i < 0 || i >= list.length) return;
+        const r = list[i];
+        // Remove
+        this.pendingResolutions.splice(i, 1);
+        this.rebuildPendingIndex();
+        // Update per-item selected bar
+        const m = { node_id: r.node_id, widget_index: r.widget_index, subgraph_id: r.subgraph_id, is_top_level: r.is_top_level };
+        this.updateSelectedBarForMissing?.(m);
+        this.updateApplyPendingButton?.();
+        this.updateQueuePanel();
+    }
+
+    // Clear all queued selections
+    clearAllQueued() {
+        this.pendingResolutions = [];
+        this.pendingIndex = new Map();
+        this.updateApplyPendingButton?.();
+        this.updateQueuePanel();
+        try {
+            document.querySelectorAll('.model-linker-selected').forEach(el => { el.style.display = 'none'; el.innerHTML = ''; });
+        } catch (e) { /* ignore */ }
+    }
+
+    // Rebuild pending index after modification
+    rebuildPendingIndex() {
+        this.pendingIndex = new Map();
+        for (let i = 0; i < this.pendingResolutions.length; i++) {
+            const r = this.pendingResolutions[i];
+            const key = `${r.node_id}:${r.widget_index}:${r.subgraph_id || ''}:${r.is_top_level ? 'T' : 'F'}`;
+            this.pendingIndex.set(key, i);
+        }
+    }
+
+    // Collapse/expand queue panel
+    toggleQueueCollapsed() {
+        this.setQueueCollapsed(!this.queueCollapsed);
+    }
+
+    setQueueCollapsed(collapsed) {
+        this.queueCollapsed = !!collapsed;
+        if (!this.queueElement || !this.splitterElement) return;
+        if (this.queueCollapsed) {
+            this.queueElement.style.display = 'none';
+            this.splitterElement.style.display = 'none';
+            try { localStorage.setItem('model_linker_queue_collapsed', '1'); } catch (e) { }
+        } else {
+            this.queueElement.style.display = '';
+            this.splitterElement.style.display = '';
+            try { localStorage.setItem('model_linker_queue_collapsed', '0'); } catch (e) { }
+        }
+        this.updateQueuePanel();
+        this.updateQueueToggleIcon();
+    }
+
+    updateQueueToggleIcon() {
+        if (!this.queueToggleIcon) return;
+        if (this.queueCollapsed) {
+            this.queueToggleIcon.textContent = '⮞';
+            this.queueToggleIcon.title = 'Expand queue';
+        } else {
+            this.queueToggleIcon.textContent = '⮜';
+            this.queueToggleIcon.title = 'Collapse queue';
+        }
+    }
+
+    // Begin split drag for resizable panels
+    startSplitDrag(e) {
+        try {
+            if (!this.queueElement) return;
+            const rect = this.queueElement.getBoundingClientRect();
+            const body = document.getElementById('model-linker-body');
+            const bodyRect = body ? body.getBoundingClientRect() : { width: window.innerWidth };
+            this._splitDragging = true;
+            this._splitStart = {
+                x: e.clientX,
+                startWidth: rect.width,
+                containerWidth: bodyRect.width
+            };
+            this._prevUserSelect = document.body.style.userSelect;
+            document.body.style.userSelect = 'none';
+            this._onSplitMove = (ev) => this.onSplitDrag(ev);
+            this._onSplitUp = () => this.endSplitDrag();
+            document.addEventListener('mousemove', this._onSplitMove);
+            document.addEventListener('mouseup', this._onSplitUp, { once: true });
+        } catch (err) { /* ignore */ }
+    }
+
+    onSplitDrag(e) {
+        if (!this._splitDragging || !this._splitStart || !this.queueElement) return;
+        const dx = e.clientX - this._splitStart.x;
+        let newW = this._splitStart.startWidth - dx;
+        const minW = 240;
+        const maxW = Math.max(minW, Math.floor(this._splitStart.containerWidth - 360));
+        if (newW < minW) newW = minW;
+        if (newW > maxW) newW = maxW;
+        this.queueElement.style.width = `${Math.round(newW)}px`;
+    }
+
+    endSplitDrag() {
+        if (!this._splitDragging) return;
+        this._splitDragging = false;
+        document.removeEventListener('mousemove', this._onSplitMove);
+        try {
+            const rect = this.queueElement.getBoundingClientRect();
+            localStorage.setItem('model_linker_split_w', String(Math.round(rect.width)));
+        } catch (e) { }
+        try { document.body.style.userSelect = this._prevUserSelect || ''; } catch (e) { }
+    }
+
+    /**
+     * Queue a resolution for later batch apply
+     */
+    queueResolution(missing, resolvedModel) {
+        if (!resolvedModel) {
+            this.showNotification('No model selected', 'error');
+            return;
+        }
+
+        const resolution = {
+            node_id: missing.node_id,
+            widget_index: missing.widget_index,
+            resolved_path: resolvedModel.path,
+            category: missing.category,
+            resolved_model: resolvedModel,
+            original_path: missing.original_path,
+            subgraph_id: missing.subgraph_id,
+            is_top_level: missing.is_top_level,
+            node_type: missing.node_type,
+            node_label: missing.subgraph_name || missing.node_type
+        };
+
+        const key = `${resolution.node_id}:${resolution.widget_index}:${resolution.subgraph_id || ''}:${resolution.is_top_level ? 'T' : 'F'}`;
+        if (this.pendingIndex.has(key)) {
+            // replace existing selection for this slot
+            const idx = this.pendingIndex.get(key);
+            this.pendingResolutions[idx] = resolution;
+        } else {
+            this.pendingIndex.set(key, this.pendingResolutions.length);
+            this.pendingResolutions.push(resolution);
+        }
+
+        // Update selected bar UI
+        this.updateSelectedBarForMissing?.(missing);
+        this.updateQueuePanel();
+        this.updateApplyPendingButton();
+    }
+
+    /**
+     * Apply all pending resolutions in batch
+     */
+    async applyPendingResolutions() {
+        const list = this.pendingResolutions || [];
+        if (!list.length) {
+            this.showNotification('No selections queued', 'error');
+            return;
+        }
+
+        try {
+            const workflow = this.getCurrentWorkflow();
+            if (!workflow) {
+                this.showNotification('No workflow loaded', 'error');
+                return;
+            }
+
+            const response = await api.fetchApi('/model_linker/resolve', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ workflow, resolutions: list })
+            });
+
+            if (!response.ok) throw new Error(`API error: ${response.status}`);
+
+            const data = await response.json();
+            if (data.success) {
+                await this.updateWorkflowInComfyUI(data.workflow);
+                this.showNotification(`✓ Linked ${list.length} selection${list.length>1?'s':''}`, 'success');
+                // Clear queue and refresh analysis
+                this.pendingResolutions = [];
+                this.pendingIndex = new Map();
+                this.updateApplyPendingButton();
+                this.updateQueuePanel();
+                await this.loadWorkflowData(data.workflow);
+            } else {
+                this.showNotification('Failed to apply selections: ' + (data.error || 'Unknown error'), 'error');
+            }
+        } catch (e) {
+            console.error('Model Linker: applyPendingResolutions error', e);
+            this.showNotification('Error applying selections: ' + e.message, 'error');
+        }
+    }
+
+    updateApplyPendingButton() {
+        if (!this.applyPendingBtn) return;
+        const count = this.pendingResolutions?.length || 0;
+        this.applyPendingBtn.textContent = `Apply Selected (${count})`;
+        this.applyPendingBtn.disabled = count === 0;
     }
     
     createFooter() {
@@ -999,6 +1613,17 @@ class LinkerManagerDialog extends ComfyDialog {
             $el("span", { textContent: " Auto-Link 100%" })
         ]);
         
+        // Apply pending resolutions button
+        this.applyPendingBtn = $el("button.ml-btn.ml-btn-primary", {
+            id: "apply-pending-resolutions",
+            textContent: "Apply Selected (0)",
+            onclick: () => this.applyPendingResolutions(),
+            style: {
+                padding: "10px 20px",
+                fontSize: "13px"
+            }
+        });
+        
         return $el("div.ml-footer", {
             style: {
                 position: "sticky",
@@ -1009,6 +1634,7 @@ class LinkerManagerDialog extends ComfyDialog {
             }
         }, [
             this.autoResolveButton,
+            this.applyPendingBtn,
             this.downloadAllButton
         ]);
     }
@@ -1071,6 +1697,9 @@ class LinkerManagerDialog extends ComfyDialog {
         // Update button state in case there are active downloads
         this.updateDownloadAllButtonState();
         
+        // Ensure all models are loaded for dropdown
+        await this.ensureAllModelsLoaded();
+        
         // Always default to Missing Models tab when opening dialog
         if (this.activeTab !== 'missing') {
             // Manually switch tab without loading
@@ -1081,11 +1710,18 @@ class LinkerManagerDialog extends ComfyDialog {
             this.autoResolveButton.style.display = 'inline-flex';
         }
         
+        // Restore fullscreen state if enabled
+        try {
+            const fs = localStorage.getItem('model_linker_modal_fullscreen');
+            if (fs === '1') this.setFullScreen(true);
+        } catch (e) { }
+        
         // Use provided workflow or fetch from current graph
         await this.loadWorkflowData(workflow);
     }
     
     close() {
+        this._hidePreview?.();
         this.backdrop.style.display = "none";
         this.element.style.display = "none";
     }
@@ -1356,6 +1992,59 @@ class LinkerManagerDialog extends ComfyDialog {
                     this.searchOnline(missing);
                 });
             }
+            
+            // Wire up all-models search + dropdown
+            const allSearchId = `search-all-${missing.node_id}-${missing.widget_index}`;
+            const selectAllId = `select-all-${missing.node_id}-${missing.widget_index}`;
+            const resolveAllId = `resolve-all-${missing.node_id}-${missing.widget_index}`;
+            const searchEl = container.querySelector(`#${allSearchId}`);
+            const selectAllEl = container.querySelector(`#${selectAllId}`);
+            const resolveAllBtn = container.querySelector(`#${resolveAllId}`);
+
+            const allModels = Array.isArray(this.allModels) ? this.allModels : [];
+            const buildLabel = (m) => `${m.category ? m.category + ': ' : ''}${m.relative_path || m.filename || ''}`;
+
+            const populateAllOptions = (filterText) => {
+                if (!selectAllEl) return;
+                const f = (filterText || '').toLowerCase();
+                const filtered = f
+                    ? allModels.filter(m => buildLabel(m).toLowerCase().includes(f))
+                    : allModels;
+                // Build options HTML
+                let opts = '';
+                for (let i = 0; i < filtered.length; i++) {
+                    const m = filtered[i];
+                    const label = buildLabel(m);
+                    // use index in allModels for value; keep stable mapping
+                    const valueIndex = allModels.indexOf(m);
+                    if (valueIndex >= 0) {
+                        opts += `<option value="${valueIndex}">${label}</option>`;
+                    }
+                }
+                selectAllEl.innerHTML = opts;
+            };
+
+            if (selectAllEl) {
+                populateAllOptions('');
+            }
+            if (searchEl) {
+                const debouncedFilter = this.debounce(() => {
+                    populateAllOptions(searchEl.value);
+                }, 250);
+                searchEl.addEventListener('input', debouncedFilter);
+            }
+            if (resolveAllBtn && selectAllEl) {
+                resolveAllBtn.addEventListener('click', () => {
+                    const idx = parseInt(selectAllEl.value, 10);
+                    if (!isNaN(idx) && idx >= 0 && idx < allModels.length) {
+                        const chosenModel = allModels[idx];
+                        if (chosenModel) {
+                            // Queue the resolution instead of direct apply
+                            this.queueResolution(missing, chosenModel);
+                        }
+                    }
+                });
+            }
         });
     }
 
@@ -1482,6 +2171,17 @@ class LinkerManagerDialog extends ComfyDialog {
         } else {
             html += `<div class="ml-no-matches">No local matches found</div>`;
         }
+        
+        // Add all-models search picker
+        const searchId = `search-all-${missing.node_id}-${missing.widget_index}`;
+        const selectAllId = `select-all-${missing.node_id}-${missing.widget_index}`;
+        const resolveAllId = `resolve-all-${missing.node_id}-${missing.widget_index}`;
+        html += `<div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--ml-border);">`;
+        html += `<div style="margin-bottom: 8px; font-size: 12px; color: var(--ml-text-muted);">Search all models:</div>`;
+        html += `<input id="${searchId}" type="text" placeholder="type to filter..." style="width: 100%; padding: 6px; margin-bottom: 6px; background: var(--comfy-input-bg); color: var(--input-text); border: 1px solid var(--border-color); border-radius: 4px;" />`;
+        html += `<select id="${selectAllId}" class="model-linker-select" size="6" multiple style="width: 100%; padding: 4px; background: var(--comfy-input-bg); color: var(--input-text); border: 1px solid var(--border-color); border-radius: 4px; margin-bottom: 6px;"></select>`;
+        html += `<button id="${resolveAllId}" class="ml-btn ml-btn-primary ml-btn-sm" style="width: 100%;">Queue Selection</button>`;
+        html += `</div>`;
         
         html += `</div>`; // End left column
         
