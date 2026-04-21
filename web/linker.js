@@ -1785,8 +1785,31 @@ class LinkerManagerDialog extends ComfyDialog {
             if (fs === '1') this.setFullScreen(true);
         } catch (e) { }
         
+        // Attach drag handle event listener (only once)
+        this.attachDragHandleIfNeeded();
+        
         // Use provided workflow or fetch from current graph
         await this.loadWorkflowData(workflow);
+    }
+    
+    // Attach drag handle event listeners
+    attachDragHandleIfNeeded() {
+        if (this._dragHandleAttached) return;
+        
+        const handle = document.getElementById('model-linker-drag-handle');
+        if (!handle) return;
+        
+        const onMouseDown = (e) => {
+            if (this.fullscreen) return; // no drag in fullscreen
+            handle.style.cursor = 'grabbing';
+            this.startDrag(e);
+        };
+        const onMouseUp = () => { handle.style.cursor = 'grab'; };
+        
+        handle.addEventListener('mousedown', onMouseDown);
+        document.addEventListener('mouseup', onMouseUp, { once: true });
+        
+        this._dragHandleAttached = true;
     }
     
     close() {
