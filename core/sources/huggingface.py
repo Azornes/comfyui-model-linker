@@ -11,6 +11,8 @@ import requests
 from typing import Dict, Any, Optional, List
 from urllib.parse import urlparse, quote
 
+from ..log_system.log_funcs import log_debug, log_info, log_warn, log_error, log_exception
+
 logger = logging.getLogger(__name__)
 
 HF_API_URL = "https://huggingface.co/api"

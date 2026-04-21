@@ -6,7 +6,9 @@
 @description: Extension for relinking missing models and downloading from HuggingFace/CivitAI
 """
 
+
 import logging
+from .core.log_system.log_funcs import log_debug, log_info, log_warn, log_error, log_exception
 
 # Web directory for JavaScript interface
 WEB_DIRECTORY = "./web"

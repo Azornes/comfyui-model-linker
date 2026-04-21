@@ -8,6 +8,8 @@ import os
 import logging
 from typing import List, Dict, Any, Optional
 
+from .log_system.log_funcs import log_debug, log_info, log_warn, log_error, log_exception
+
 # Import folder_paths lazily - it may not be available until ComfyUI is initialized
 try:
     import folder_paths

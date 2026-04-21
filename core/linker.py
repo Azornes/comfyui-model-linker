@@ -7,17 +7,15 @@ Integrates all components to provide high-level API for model linking.
 import os
 import re
 import json
-import logging
 from typing import Dict, Any, List, Optional, Tuple
 from urllib.parse import unquote
 
+from .log_system.log_funcs import log_debug, log_info, log_warn, log_error, log_exception
 from .scanner import get_model_files
 from .workflow_analyzer import analyze_workflow_models, identify_missing_models
 from .matcher import find_matches
 from .workflow_updater import update_workflow_nodes
 from .sources.civitai import resolve_urn
-
-logger = logging.getLogger(__name__)
 
 # Regex patterns for URL extraction (matches HuggingFace and CivitAI URLs)
 URL_PATTERN = re.compile(r'(https?://(?:huggingface\.co|civitai\.com)[^\s"\'<>\)\\]+)')
@@ -207,7 +205,7 @@ def analyze_and_find_matches(
     """
     # Extract URLs from workflow (node.properties.models + regex)
     workflow_urls = extract_workflow_urls(workflow_json)
-    logger.debug(f"Extracted {len(workflow_urls)} URLs from workflow")
+    log_debug(f"Extracted {len(workflow_urls)} URLs from workflow")
 
     # Analyze workflow to find all model references
     all_model_refs = analyze_workflow_models(workflow_json)
@@ -239,14 +237,12 @@ def analyze_and_find_matches(
                     "model_name": model_info.get("model_name"),
                     "version_name": model_info.get("version_name"),
                 }
-            if model_info:
                 missing["civitai_info"] = model_info
                 missing["expected_filename"] = model_info["expected_filename"]
-                logger.debug(
-                    f"URN {missing['original_path']} → {missing['expected_filename']}"
+                log_debug(
+                    f"URN {missing['original_path']} -> {missing['expected_filename']}"
                 )
 
-            # Add URN type to missing model for search functionality
             if "urn" in missing:
                 missing["urn_type"] = missing["urn"].get("type", "")
 
@@ -257,10 +253,10 @@ def analyze_and_find_matches(
         is_lora_v2 = missing.get("is_lora_v2")
         exists = missing.get("exists")
         name = missing.get("name") or missing.get("original_path", "")
-        logger.debug(f"Checking {name}: is_lora_v2={is_lora_v2}, exists={exists}")
+        log_debug(f"Checking {name}: is_lora_v2={is_lora_v2}, exists={exists}")
 
         if is_lora_v2 and exists:
-            logger.info(f"Skipping LoraManager lora {name} - already exists locally")
+            log_info(f"Skipping LoraManager lora {name} - already exists locally")
             continue
 
         target_for_matching = missing.get("original_path", "")

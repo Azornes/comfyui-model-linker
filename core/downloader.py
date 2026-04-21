@@ -13,6 +13,8 @@ from typing import Dict, Any, Optional, Callable, List
 from pathlib import Path
 from collections import deque
 
+from .log_system.log_funcs import log_debug, log_info, log_warn, log_error, log_exception
+
 try:
     import folder_paths
 except ImportError:

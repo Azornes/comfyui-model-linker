@@ -13,6 +13,8 @@ import requests
 from typing import Dict, Any, Optional, List
 from urllib.parse import urlparse, parse_qs, quote
 
+from ..log_system.log_funcs import log_debug, log_info, log_warn, log_error, log_exception
+
 logger = logging.getLogger(__name__)
 
 CIVITAI_API_URL = "https://civitai.com/api/v1"
