@@ -86,7 +86,7 @@ def scan_directory(
     models = []
 
     if not os.path.exists(directory) or not os.path.isdir(directory):
-        log_debug(f"Directory does not exist or is not accessible: {directory}")
+        # log_debug(f"Directory does not exist or is not accessible: {directory}")
         return models
 
     try:
@@ -192,7 +192,7 @@ def scan_all_directories() -> List[Dict[str, str]]:
             try:
                 models = scan_directory(directory_path, extensions, category)
                 all_models.extend(models)
-                log_debug(f"Found {len(models)} models in {category}/{directory_path}")
+                #log_debug(f"Found {len(models)} models in {category}/{directory_path}")
             except Exception as e:
                 log_warn(f"Error scanning {category} directory {directory_path}: {e}")
 

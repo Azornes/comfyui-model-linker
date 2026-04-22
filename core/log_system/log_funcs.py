@@ -1,7 +1,7 @@
 """
 @author: Azornes
 @title: AzLogs
-@version: 1.4.0
+@version: 1.4.1
 @description: Logging Initializator
 """
 
@@ -15,10 +15,21 @@ try:
     from .logger import logger, LogLevel, debug, info, warn, error, exception
     from .config import LOG_LEVEL, LOG_MODULE_NAME
 
+    def _find_project_root(start_path):
+        current = os.path.dirname(os.path.abspath(start_path))
+        while current:
+            if os.path.isdir(os.path.join(current, ".git")):
+                return current
+            parent = os.path.dirname(current)
+            if parent == current:
+                break
+            current = parent
+        return os.path.dirname(os.path.dirname(os.path.abspath(start_path)))
+
     _module_name = (
         LOG_MODULE_NAME
         if LOG_MODULE_NAME is not None
-        else os.path.basename(os.path.dirname(os.path.abspath(__file__)))
+        else os.path.basename(_find_project_root(__file__))
     )
 
     logger.set_module_level(_module_name, LogLevel[LOG_LEVEL])

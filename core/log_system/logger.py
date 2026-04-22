@@ -1,7 +1,7 @@
 """
 @author: Azornes
 @title: AzLogs
-@version: 1.4.0
+@version: 1.4.1
 @description: Logging Setup - Central logging system
 
 Features:
