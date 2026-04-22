@@ -7,6 +7,9 @@
 
 import os
 import traceback
+import logging
+
+_logger = logging.getLogger(__name__)
 
 try:
     from .logger import logger, LogLevel, debug, info, warn, error, exception
@@ -28,8 +31,9 @@ try:
     )
 
     _initialized = True
-except ImportError:
+except ImportError as e:
     _initialized = False
+    _logger.error(f"Failed to initialize logger: {e}")
 
 
 def log_debug(*args, **kwargs):

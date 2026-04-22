@@ -276,18 +276,23 @@ class AzLogsLogger:
 
     def debug(self, module, *args, **kwargs):
         """Log at DEBUG level"""
+        self.log(module, LogLevel.DEBUG, *args, **kwargs)
 
     def info(self, module, *args, **kwargs):
         """Log at INFO level"""
+        self.log(module, LogLevel.INFO, *args, **kwargs)
 
     def warn(self, module, *args, **kwargs):
         """Log at WARN level"""
+        self.log(module, LogLevel.WARN, *args, **kwargs)
 
     def error(self, module, *args, **kwargs):
         """Log at ERROR level"""
+        self.log(module, LogLevel.ERROR, *args, **kwargs)
 
     def exception(self, module, *args):
         """Log exception at ERROR level"""
+        self.log(module, LogLevel.ERROR, *args, exc_info=True)
 
 
 # Singleton
@@ -297,22 +302,27 @@ logger = AzLogsLogger()
 # Helper functions
 def debug(module, *args, **kwargs):
     """Log at DEBUG level"""
+    logger.log(module, LogLevel.DEBUG, *args, **kwargs)
 
 
 def info(module, *args, **kwargs):
     """Log at INFO level"""
+    logger.log(module, LogLevel.INFO, *args, **kwargs)
 
 
 def warn(module, *args, **kwargs):
     """Log at WARN level"""
+    logger.log(module, LogLevel.WARN, *args, **kwargs)
 
 
 def error(module, *args, **kwargs):
     """Log at ERROR level"""
+    logger.log(module, LogLevel.ERROR, *args, **kwargs)
 
 
 def exception(module, *args):
     """Log exception at ERROR level"""
+    logger.log(module, LogLevel.ERROR, *args, exc_info=True)
 
 
 # Function to quickly enable/disable debugging
