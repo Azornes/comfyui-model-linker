@@ -239,21 +239,20 @@ class LinkerManagerDialog extends ComfyDialog {
         const modelCardUrl = downloadSource.model_url || this.getModelCardUrl(downloadSource.url);
 
         let html = `<div class="ml-download-section">`;
-        html += `<button id="download-${missing.node_id}-${missing.widget_index}" class="ml-btn ml-btn-download">`;
+        html += `<div class="ml-download-actions">`;
+        html += `<button id="download-${missing.node_id}-${missing.widget_index}" class="ml-btn ml-btn-download ml-btn-sm ml-btn-download-main">`;
         html += `<span class="ml-btn-icon">☁</span> Download${sizeDisplay ? ` (${sizeDisplay})` : ''}`;
         html += `</button>`;
         if (isCivitaiSource && modelCardUrl) {
-            html += ` <a href="${modelCardUrl}" target="_blank" rel="noopener noreferrer" class="ml-btn ml-btn-secondary">Open on CivitAI</a>`;
+            html += `<a href="${modelCardUrl}" target="_blank" rel="noopener noreferrer" class="ml-btn ml-btn-secondary ml-btn-sm ml-btn-download-side">Open on CivitAI</a>`;
         }
+        html += `</div>`;
         html += `<div class="ml-download-info">`;
         html += `<span class="ml-download-source">${isFromWorkflow ? 'URL from workflow' : sourceLabel}</span>`;
         if (modelCardUrl) {
             html += `<br><a href="${modelCardUrl}" target="_blank" rel="noopener noreferrer" class="ml-link" title="Open model card">${formattedDownloadName.display}</a>`;
         } else {
             html += `<br><span title="${formattedDownloadName.full}">${formattedDownloadName.display}</span>`;
-        }
-        if (isCivitaiSource) {
-            html += `<br><span class="ml-muted-note" style="display:inline-block; margin-top: 8px;">Direct CivitAI download can require an API key for some models.</span>`;
         }
         html += `</div>`;
         html += this.renderDownloadTargetControls(missing, downloadSource.directory || downloadSource.category || 'checkpoints');
@@ -305,7 +304,7 @@ class LinkerManagerDialog extends ComfyDialog {
                 html += `<div class="ml-match-row ${isBestMatch ? 'ml-best-match' : ''}" data-model="${modelData}" oncontextmenu="window.MLOpenContextMenu(event, this)">`;
                 html += this.getConfidenceBadge(match.confidence);
                 html += `<span class="ml-match-filename" title="${formattedPath.full}">${formattedPath.display}</span>`;
-                html += `<button id="${buttonId}" class="ml-btn ml-btn-secondary ml-btn-sm ml-btn-utility">`;
+                html += `<button id="${buttonId}" class="ml-btn ml-btn-secondary ml-btn-sm ml-btn-utility ml-btn-link-compact">`;
                 html += `<span class="ml-btn-icon">🔗</span> Link`;
                 html += `</button>`;
                 html += `</div>`;
@@ -323,7 +322,7 @@ class LinkerManagerDialog extends ComfyDialog {
                     html += `<div class="ml-match-row" data-model="${modelData}" oncontextmenu="window.MLOpenContextMenu(event, this)">`;
                     html += this.getConfidenceBadge(match.confidence);
                     html += `<span class="ml-match-filename" title="${match.path || match.filename}" style="flex: 1; overflow: hidden; text-overflow: ellipsis;">${match.filename || match.path?.split(/[/\\]/).pop()}</span>`;
-                    html += `<button id="${altBtnId}" class="ml-btn ml-btn-secondary ml-btn-sm ml-btn-utility">🔗 Link</button>`;
+                    html += `<button id="${altBtnId}" class="ml-btn ml-btn-secondary ml-btn-sm ml-btn-utility ml-btn-link-compact">🔗 Link</button>`;
                     html += `</div>`;
                 }
                 html += `</div>`;
@@ -1308,8 +1307,8 @@ class LinkerManagerDialog extends ComfyDialog {
                 background: var(--ml-card-bg);
                 border: 1px solid transparent;
                 border-radius: var(--ml-radius-lg);
-                padding: 12px;
-                margin-bottom: 10px;
+                padding: 10px 12px;
+                margin-bottom: 4px;
                 transition: transform 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
                 box-shadow: inset 0 0 0 1px rgba(255,255,255,0.018);
                 font-family: "Segoe UI Variable", "Segoe UI", sans-serif;
@@ -1331,17 +1330,17 @@ class LinkerManagerDialog extends ComfyDialog {
                 align-items: flex-start;
                 justify-content: space-between;
                 gap: 10px;
-                margin-bottom: 8px;
+                margin-bottom: 6px;
             }
             .ml-card-title-wrap {
                 min-width: 0;
                 flex: 1;
                 display: grid;
-                gap: 6px;
+                gap: 4px;
             }
             .ml-card-title-meta {
                 display: grid;
-                gap: 4px;
+                gap: 2px;
             }
             .ml-card-title {
                 font-size: 15px;
@@ -1446,7 +1445,7 @@ class LinkerManagerDialog extends ComfyDialog {
             .ml-columns {
                 display: grid;
                 grid-template-columns: 1fr 1fr;
-                gap: 10px;
+                gap: 8px;
             }
             @media (max-width: 700px) {
                 .ml-missing-summary {
@@ -1468,7 +1467,7 @@ class LinkerManagerDialog extends ComfyDialog {
                 background: var(--ml-panel-bg);
                 border: 1px solid transparent;
                 border-radius: var(--ml-radius-md);
-                padding: 12px;
+                padding: 10px;
                 box-shadow: inset 0 0 0 1px rgba(148,163,184,0.06);
             }
             .ml-column-header {
@@ -1477,8 +1476,8 @@ class LinkerManagerDialog extends ComfyDialog {
                 color: var(--ml-text-muted);
                 text-transform: uppercase;
                 letter-spacing: 0.1em;
-                margin-bottom: 10px;
-                padding-bottom: 8px;
+                margin-bottom: 8px;
+                padding-bottom: 6px;
                 border-bottom: 1px solid var(--ml-divider);
             }
             .ml-muted-note,
@@ -1557,9 +1556,9 @@ class LinkerManagerDialog extends ComfyDialog {
                 display: flex;
                 align-items: center;
                 gap: 8px;
-                padding: 8px 10px;
+                padding: 6px 8px;
                 border-radius: var(--ml-radius-sm);
-                margin-bottom: 6px;
+                margin-bottom: 4px;
                 background: rgba(255,255,255,0.016);
                 border: 1px solid transparent;
                 transition: background 0.15s ease, box-shadow 0.15s ease;
@@ -1649,10 +1648,10 @@ class LinkerManagerDialog extends ComfyDialog {
                 background: #d32f2f;
             }
             .ml-btn-sm {
-                min-height: 28px;
-                padding: 3px 8px;
-                font-size: 10px;
-                border-radius: 9px;
+                min-height: 24px;
+                padding: 2px 7px;
+                font-size: 9px;
+                border-radius: 8px;
             }
             .ml-btn-ghost {
                 background: rgba(255,255,255,0.018);
@@ -1666,14 +1665,20 @@ class LinkerManagerDialog extends ComfyDialog {
                 border-color: rgba(255,255,255,0.14);
             }
             .ml-btn-utility {
-                padding-inline: 8px;
+                padding-inline: 6px;
                 font-weight: 600;
                 letter-spacing: 0.01em;
                 color: var(--ml-text-soft);
             }
+            .ml-btn-link-compact {
+                min-width: 58px;
+                gap: 4px;
+                padding-inline: 5px;
+                font-size: 8.75px;
+            }
             .ml-btn-icon-only {
-                width: 28px;
-                min-width: 28px;
+                width: 24px;
+                min-width: 24px;
                 padding: 0;
                 aspect-ratio: 1;
             }
@@ -1683,7 +1688,7 @@ class LinkerManagerDialog extends ComfyDialog {
             .ml-card-actions .ml-btn,
             .ml-match-row .ml-btn,
             .ml-combo-row .ml-btn {
-                min-height: 28px;
+                min-height: 24px;
             }
             .ml-search-source-btn {
                 border-radius: 999px;
@@ -1697,12 +1702,27 @@ class LinkerManagerDialog extends ComfyDialog {
             /* Download Section */
             .ml-download-section {
                 display: grid;
-                gap: 10px;
-                padding: 11px;
+                gap: 8px;
+                padding: 10px;
                 background: var(--ml-surface-elevated);
                 border-radius: var(--ml-radius-md);
                 border: 1px solid transparent;
                 box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05);
+            }
+            .ml-download-actions {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) auto;
+                gap: 8px;
+                align-items: center;
+            }
+            .ml-btn-download-main {
+                justify-content: flex-start;
+                padding-inline: 10px;
+                font-size: 8.9px;
+            }
+            .ml-btn-download-side {
+                min-width: 132px;
+                font-size: 8.6px;
             }
             .ml-status-inline {
                 display: flex;
@@ -1736,15 +1756,15 @@ class LinkerManagerDialog extends ComfyDialog {
             }
             .ml-combo-section {
                 position: relative;
-                margin-top: 12px;
-                padding-top: 12px;
+                margin-top: 8px;
+                padding-top: 8px;
                 border-top: 1px solid var(--ml-divider);
             }
             .ml-combo-row {
                 display: flex;
                 align-items: center;
                 gap: 6px;
-                margin-bottom: 6px;
+                margin-bottom: 4px;
             }
             .ml-combo-label {
                 opacity: 0.9;
@@ -1758,8 +1778,8 @@ class LinkerManagerDialog extends ComfyDialog {
             .ml-combo-input {
                 flex: 1;
                 min-width: 0;
-                min-height: 34px;
-                padding: 7px 11px;
+                min-height: 30px;
+                padding: 5px 10px;
                 background: rgba(12,16,22,0.5);
                 color: var(--ml-text);
                 border: 1px solid rgba(255,255,255,0.1);
@@ -1931,6 +1951,7 @@ class LinkerManagerDialog extends ComfyDialog {
                     linear-gradient(180deg, rgba(255,255,255,0.02) 0%, rgba(255,255,255,0.005) 100%);
                 position: relative;
                 z-index: 2;
+                border-bottom: 1px solid var(--ml-border);
             }
             .ml-tab {
                 position: relative;
@@ -1958,11 +1979,11 @@ class LinkerManagerDialog extends ComfyDialog {
             }
             .ml-tab.ml-tab-active {
                 color: var(--ml-text, #eef2f7);
-                background: #1e1e1e;
+                background: var(--ml-bg);
                 border-color: rgba(255,255,255,0.16);
                 box-shadow:
-                    0 -10px 24px rgba(0,0,0,0.12),
-                    0 10px 20px rgba(0,0,0,0.14),
+                    0 -8px 18px rgba(0,0,0,0.1),
+                    0 6px 10px rgba(0,0,0,0.08),
                     inset 0 1px 0 rgba(255,255,255,0.03);
                 transform: translateY(1px);
                 opacity: 1;
@@ -1975,7 +1996,7 @@ class LinkerManagerDialog extends ComfyDialog {
                 right: 0;
                 bottom: -6px;
                 height: 8px;
-                background: #1e1e1e;
+                background: var(--ml-bg);
                 border-bottom-left-radius: 8px;
                 border-bottom-right-radius: 8px;
             }
