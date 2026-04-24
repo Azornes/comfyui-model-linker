@@ -258,6 +258,18 @@ class LinkerManagerDialog extends ComfyDialog {
         return html;
     }
 
+    buildContextMenuModelData(model = {}, fallbackName = '') {
+        const resolvedPath = model.path || model.resolved_path || '';
+        const filename = model.filename || fallbackName || resolvedPath.split(/[\/\\]/).pop() || '';
+        return {
+            ...model,
+            name: model.name || filename,
+            original_path: model.original_path || filename,
+            resolved_path: resolvedPath,
+            category: model.category || ''
+        };
+    }
+
     renderLocalMatchesContent(missing, missingIndex = 0) {
         const allMatches = missing.matches || [];
         const filteredMatches = allMatches.filter(m => m.confidence >= 70);
@@ -284,7 +296,8 @@ class LinkerManagerDialog extends ComfyDialog {
                 const matchPath = match.model?.relative_path || match.filename || '';
                 const formattedPath = this.formatPath(matchPath, 45);
                 const isBestMatch = matchIndex === 0 && match.confidence >= 95;
-                const modelData = encodeURIComponent(JSON.stringify(match.model || {}));
+                const contextModel = this.buildContextMenuModelData(match.model || {}, match.filename || '');
+                const modelData = encodeURIComponent(JSON.stringify(contextModel));
 
                 html += `<div class="ml-match-row ${isBestMatch ? 'ml-best-match' : ''}" data-model="${modelData}" oncontextmenu="window.MLOpenContextMenu(event, this)">`;
                 html += this.getConfidenceBadge(match.confidence);
@@ -303,7 +316,8 @@ class LinkerManagerDialog extends ComfyDialog {
                     const match = otherMatches[mIdx];
                     const confClass = match.confidence >= 70 ? 'ml-badge-medium' : 'ml-badge-low';
                     const altBtnId = `resolve-alt-${missingIndex}-${missing.node_id}-${missing.widget_index}-${mIdx}`;
-                    const modelData = encodeURIComponent(JSON.stringify(match.model || {}));
+                    const contextModel = this.buildContextMenuModelData(match.model || {}, match.filename || '');
+                    const modelData = encodeURIComponent(JSON.stringify(contextModel));
                     html += `<div class="ml-match-row" data-model="${modelData}" oncontextmenu="window.MLOpenContextMenu(event, this)">`;
                     html += `<span class="ml-badge ${confClass}">${match.confidence}%</span>`;
                     html += `<span class="ml-match-filename" title="${match.path || match.filename}" style="flex: 1; overflow: hidden; text-overflow: ellipsis;">${match.filename || match.path?.split(/[/\\]/).pop()}</span>`;
