@@ -67,6 +67,14 @@ class LinkerManagerDialog extends ComfyDialog {
             }, [
                 $el("span.ml-context-menu-item-icon", { textContent: "🌐" }),
                 $el("span", { textContent: "Open in CivitAI" })
+            ]),
+            $el("div.ml-context-menu-divider"),
+            $el("div.ml-context-menu-item", {
+                onclick: () => this.handleContextMenuAction('openFolder'),
+                style: { cursor: "pointer" }
+            }, [
+                $el("span.ml-context-menu-item-icon", { textContent: "📁" }),
+                $el("span", { textContent: "Open Containing Folder" })
             ])
         ]);
         
@@ -250,6 +258,144 @@ class LinkerManagerDialog extends ComfyDialog {
         return html;
     }
 
+    renderLocalMatchesContent(missing, missingIndex = 0) {
+        const allMatches = missing.matches || [];
+        const filteredMatches = allMatches.filter(m => m.confidence >= 70);
+        const hasMatches = filteredMatches.length > 0;
+        const perfectMatches = filteredMatches.filter(m => m.confidence === 100);
+        const otherMatches = filteredMatches.filter(m => m.confidence < 100 && m.confidence >= 70);
+
+        let html = '';
+
+        if (hasMatches) {
+            const matchesToShow = perfectMatches.length > 0
+                ? perfectMatches
+                : otherMatches.sort((a, b) => b.confidence - a.confidence).slice(0, 5);
+
+            const sortedMatches = matchesToShow.sort((a, b) => {
+                if (a.confidence === 100 && b.confidence !== 100) return -1;
+                if (a.confidence !== 100 && b.confidence === 100) return 1;
+                return b.confidence - a.confidence;
+            });
+
+            for (let matchIndex = 0; matchIndex < sortedMatches.length; matchIndex++) {
+                const match = sortedMatches[matchIndex];
+                const buttonId = `resolve-${missingIndex}-${missing.node_id}-${missing.widget_index}-${matchIndex}`;
+                const matchPath = match.model?.relative_path || match.filename || '';
+                const formattedPath = this.formatPath(matchPath, 45);
+                const isBestMatch = matchIndex === 0 && match.confidence >= 95;
+                const modelData = encodeURIComponent(JSON.stringify(match.model || {}));
+
+                html += `<div class="ml-match-row ${isBestMatch ? 'ml-best-match' : ''}" data-model="${modelData}" oncontextmenu="window.MLOpenContextMenu(event, this)">`;
+                html += this.getConfidenceBadge(match.confidence);
+                html += `<span class="ml-match-filename" title="${formattedPath.full}">${formattedPath.display}</span>`;
+                html += `<button id="${buttonId}" class="ml-btn ${isBestMatch ? 'ml-btn-primary' : 'ml-btn-secondary'} ml-btn-sm">`;
+                html += `<span class="ml-btn-icon">🔗</span> Link`;
+                html += `</button>`;
+                html += `</div>`;
+            }
+
+            if (perfectMatches.length > 0 && otherMatches.length > 0) {
+                const matchId = `more-matches-${missing.node_id}-${missing.widget_index}`;
+                html += `<div class="ml-no-matches" style="cursor: pointer; color: var(--ml-accent-blue);" onclick="document.getElementById('${matchId}').style.display = document.getElementById('${matchId}').style.display === 'none' ? 'block' : 'none'; this.textContent = this.textContent === '${otherMatches.length} other matches below 100%' ? 'Hide alternatives' : '${otherMatches.length} other matches below 100%'">${otherMatches.length} other match${otherMatches.length > 1 ? 'es' : ''} below 100%</div>`;
+                html += `<div id="${matchId}" style="display: none; flex-direction: column; gap: 4px; margin-top: 8px;">`;
+                for (let mIdx = 0; mIdx < otherMatches.length; mIdx++) {
+                    const match = otherMatches[mIdx];
+                    const confClass = match.confidence >= 70 ? 'ml-badge-medium' : 'ml-badge-low';
+                    const altBtnId = `resolve-alt-${missingIndex}-${missing.node_id}-${missing.widget_index}-${mIdx}`;
+                    const modelData = encodeURIComponent(JSON.stringify(match.model || {}));
+                    html += `<div class="ml-match-row" data-model="${modelData}" oncontextmenu="window.MLOpenContextMenu(event, this)">`;
+                    html += `<span class="ml-badge ${confClass}">${match.confidence}%</span>`;
+                    html += `<span class="ml-match-filename" title="${match.path || match.filename}" style="flex: 1; overflow: hidden; text-overflow: ellipsis;">${match.filename || match.path?.split(/[/\\]/).pop()}</span>`;
+                    html += `<button id="${altBtnId}" class="ml-btn ml-btn-secondary ml-btn-sm">🔗 Link</button>`;
+                    html += `</div>`;
+                }
+                html += `</div>`;
+            }
+        } else if (missing.is_urn && !missing.civitai_info) {
+            html += `<div class="ml-no-matches">Waiting for CivitAI filename to search local models...</div>`;
+        } else if (allMatches.length > 0 && filteredMatches.length === 0) {
+            html += `<div class="ml-no-matches">No matches above 70% confidence</div>`;
+        } else {
+            html += `<div class="ml-no-matches">No local matches found</div>`;
+        }
+
+        return html;
+    }
+
+    wireLocalMatchButtons(container, missing, missingIndex = 0) {
+        const allMatches = missing.matches || [];
+        const filteredMatches = allMatches.filter(m => m.confidence >= 70);
+        const perfectMatches = filteredMatches.filter(m => m.confidence === 100);
+        const otherMatches = filteredMatches.filter(m => m.confidence < 100 && m.confidence >= 70);
+        const matchesToShow = perfectMatches.length > 0
+            ? perfectMatches
+            : otherMatches.sort((a, b) => b.confidence - a.confidence).slice(0, 5);
+
+        const sortedMatches = matchesToShow.sort((a, b) => {
+            if (a.confidence === 100 && b.confidence !== 100) return -1;
+            if (a.confidence !== 100 && b.confidence === 100) return 1;
+            return b.confidence - a.confidence;
+        });
+
+        sortedMatches.forEach((match, matchIndex) => {
+            const buttonId = `resolve-${missingIndex}-${missing.node_id}-${missing.widget_index}-${matchIndex}`;
+            const resolveButton = container.querySelector(`#${buttonId}`);
+            if (resolveButton) {
+                resolveButton.onclick = null;
+                resolveButton.addEventListener('click', () => {
+                    this.queueResolution(missing, match.model);
+                });
+            }
+        });
+
+        if (otherMatches && otherMatches.length > 0) {
+            for (let mIdx = 0; mIdx < otherMatches.length; mIdx++) {
+                const match = otherMatches[mIdx];
+                const altBtnId = `resolve-alt-${missingIndex}-${missing.node_id}-${missing.widget_index}-${mIdx}`;
+                const altBtn = container.querySelector(`#${altBtnId}`);
+                if (altBtn) {
+                    altBtn.addEventListener('click', () => {
+                        this.queueResolution(missing, match.model);
+                    });
+                }
+            }
+        }
+    }
+
+    async refreshUrnLocalMatches(missing) {
+        if (!missing?.civitai_info?.expected_filename || !this.contentElement) return;
+
+        const bodyId = `local-matches-body-${missing.node_id}-${missing.widget_index}`;
+        const container = this.contentElement.querySelector(`#${bodyId}`);
+        if (!container) return;
+
+        container.innerHTML = `<div class="ml-no-matches">Searching local matches for "${missing.civitai_info.expected_filename}"...</div>`;
+
+        try {
+            const response = await api.fetchApi('/model_linker/local-matches', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    filename: missing.civitai_info.expected_filename,
+                    category: missing.category || ''
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`Local match search failed: ${response.status}`);
+            }
+
+            const data = await response.json();
+            missing.matches = Array.isArray(data.matches) ? data.matches : [];
+            container.innerHTML = this.renderLocalMatchesContent(missing, missing.__displayIndex || 0);
+            this.wireLocalMatchButtons(this.contentElement, missing, missing.__displayIndex || 0);
+        } catch (error) {
+            console.error('Model Linker: URN local match refresh error:', error);
+            container.innerHTML = `<div class="ml-no-matches">Failed to refresh local matches.</div>`;
+        }
+    }
+
     /**
      * Handle click outside context menu to hide it
      */
@@ -306,8 +452,33 @@ class LinkerManagerDialog extends ComfyDialog {
         
         if (action === 'civitai') {
             this.openInCivitAI(model);
+        } else if (action === 'openFolder') {
+            this.openContainingFolder(model);
         } else if (action === 'showInfo') {
             this.showModelInfo(model);
+        }
+    }
+
+    async openContainingFolder(model) {
+        const path = model?.path || model?.resolved_path || '';
+        if (!path) {
+            this.showNotification('No local file path available', 'error');
+            return;
+        }
+
+        try {
+            const response = await api.fetchApi('/model_linker/open-containing-folder', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ path })
+            });
+
+            if (!response.ok) {
+                throw new Error(`Open folder failed: ${response.status}`);
+            }
+        } catch (error) {
+            console.error('Model Linker: Open folder error:', error);
+            this.showNotification('Failed to open containing folder', 'error');
         }
     }
     
@@ -3355,6 +3526,7 @@ class LinkerManagerDialog extends ComfyDialog {
         });
 
         for (let mi = 0; mi < sortedMissingModels.length; mi++) {
+            sortedMissingModels[mi].__displayIndex = mi;
             html += this.renderMissingModel(sortedMissingModels[mi], mi);
         }
 
@@ -3364,59 +3536,7 @@ class LinkerManagerDialog extends ComfyDialog {
         // Attach event listeners for resolve buttons (use sorted order)
         // Note: We need to match the exact same logic as renderMissingModel to find which buttons were rendered
         sortedMissingModels.forEach((missing, missingIndex) => {
-            const allMatches = missing.matches || [];
-            
-            // Filter out matches below 70% confidence threshold
-            const filteredMatches = allMatches.filter(m => m.confidence >= 70);
-            
-            // Filter to only 100% matches if available, otherwise use filtered matches (>=70%)
-            const perfectMatches = filteredMatches.filter(m => m.confidence === 100);
-            const otherMatches = filteredMatches.filter(m => m.confidence < 100 && m.confidence >= 70);
-            
-            // Match the same logic as renderMissingModel
-            const matchesToShow = perfectMatches.length > 0 
-                ? perfectMatches 
-                : otherMatches.sort((a, b) => b.confidence - a.confidence).slice(0, 5);
-            
-            // Sort: 100% matches first, then by confidence descending (same as renderMissingModel)
-            const sortedMatches = matchesToShow.sort((a, b) => {
-                if (a.confidence === 100 && b.confidence !== 100) return -1;
-                if (a.confidence !== 100 && b.confidence === 100) return 1;
-                return b.confidence - a.confidence;
-            });
-            
-            sortedMatches.forEach((match, matchIndex) => {
-                // Attach listener to all matches (all now have resolve buttons)
-                // Use unique ID that includes missingIndex to avoid conflicts between different missing models with same node_id
-                const buttonId = `resolve-${missingIndex}-${missing.node_id}-${missing.widget_index}-${matchIndex}`;
-                const resolveButton = container.querySelector(`#${buttonId}`);
-                console.log('Attaching listener for', buttonId, 'missingIndex:', missingIndex);
-                if (resolveButton) {
-                    // Remove any existing listeners to prevent duplicates
-                    resolveButton.onclick = null;
-                    resolveButton.addEventListener('click', () => {
-                        console.log('>>> Queue button clicked:', buttonId, missing.original_path, '->', match.model?.filename);
-                        // Queue the selection instead of directly applying
-                        this.queueResolution(missing, match.model);
-                    });
-                } else {
-                    console.warn('Button not found:', buttonId);
-                }
-            });
-            
-            // Attach alternative (other matches below 100%) button listeners
-            if (otherMatches && otherMatches.length > 0) {
-                for (let mIdx = 0; mIdx < otherMatches.length; mIdx++) {
-                    const match = otherMatches[mIdx];
-                    const altBtnId = `resolve-alt-${missingIndex}-${missing.node_id}-${missing.widget_index}-${mIdx}`;
-                    const altBtn = container.querySelector(`#${altBtnId}`);
-                    if (altBtn) {
-                        altBtn.addEventListener('click', () => {
-                            this.queueResolution(missing, match.model);
-                        });
-                    }
-                }
-            }
+            this.wireLocalMatchButtons(container, missing, missingIndex);
             
             // Attach download button listener
             const downloadBtnId = `download-${missing.node_id}-${missing.widget_index}`;
@@ -3635,59 +3755,9 @@ class LinkerManagerDialog extends ComfyDialog {
         // LEFT COLUMN: Local Matches
         html += `<div class="ml-column">`;
         html += `<div class="ml-column-header">Local Matches</div>`;
-        
-        if (hasMatches) {
-            // If we have 100% matches, only show those. Otherwise, show other matches sorted by confidence
-            const matchesToShow = perfectMatches.length > 0 
-                ? perfectMatches 
-                : otherMatches.sort((a, b) => b.confidence - a.confidence).slice(0, 5);
-            
-            // Sort: 100% matches first, then by confidence descending
-            const sortedMatches = matchesToShow.sort((a, b) => {
-                if (a.confidence === 100 && b.confidence !== 100) return -1;
-                if (a.confidence !== 100 && b.confidence === 100) return 1;
-                return b.confidence - a.confidence;
-            });
-            
-            for (let matchIndex = 0; matchIndex < sortedMatches.length; matchIndex++) {
-                const match = sortedMatches[matchIndex];
-                const buttonId = `resolve-${missingIndex}-${missing.node_id}-${missing.widget_index}-${matchIndex}`;
-                const matchPath = match.model?.relative_path || match.filename || '';
-                const formattedPath = this.formatPath(matchPath, 45);
-                const isBestMatch = matchIndex === 0 && match.confidence >= 95;
-                
-                html += `<div class="ml-match-row ${isBestMatch ? 'ml-best-match' : ''}">`;
-                html += this.getConfidenceBadge(match.confidence);
-                html += `<span class="ml-match-filename" title="${formattedPath.full}">${formattedPath.display}</span>`;
-                html += `<button id="${buttonId}" class="ml-btn ${isBestMatch ? 'ml-btn-primary' : 'ml-btn-secondary'} ml-btn-sm">`;
-                html += `<span class="ml-btn-icon">🔗</span> Link`;
-                html += `</button>`;
-                html += `</div>`;
-            }
-            
-            // Add note if only showing 100% matches - make it expandable
-            if (perfectMatches.length > 0 && otherMatches.length > 0) {
-                const matchId = `more-matches-${missing.node_id}-${missing.widget_index}`;
-                html += `<div class="ml-no-matches" style="cursor: pointer; color: var(--ml-accent-blue);" onclick="document.getElementById('${matchId}').style.display = document.getElementById('${matchId}').style.display === 'none' ? 'block' : 'none'; this.textContent = this.textContent === '${otherMatches.length} other matches below 100%' ? 'Hide alternatives' : '${otherMatches.length} other matches below 100%'">${otherMatches.length} other match${otherMatches.length > 1 ? 'es' : ''} below 100%</div>`;
-                // Hidden container with other matches
-                html += `<div id="${matchId}" style="display: none; flex-direction: column; gap: 4px; margin-top: 8px;">`;
-                for (let mIdx = 0; mIdx < otherMatches.length; mIdx++) {
-                    const match = otherMatches[mIdx];
-                    const confClass = match.confidence >= 70 ? 'ml-badge-medium' : 'ml-badge-low';
-                    const altBtnId = `resolve-alt-${missingIndex}-${missing.node_id}-${missing.widget_index}-${mIdx}`;
-                    html += `<div class="ml-match-row">`;
-                    html += `<span class="ml-badge ${confClass}">${match.confidence}%</span>`;
-                    html += `<span class="ml-match-filename" title="${match.path || match.filename}" style="flex: 1; overflow: hidden; text-overflow: ellipsis;">${match.filename || match.path?.split(/[/\\]/).pop()}</span>`;
-                    html += `<button id="${altBtnId}" class="ml-btn ml-btn-secondary ml-btn-sm">🔗 Link</button>`;
-                    html += `</div>`;
-                }
-                html += `</div>`;
-            }
-        } else if (allMatches.length > 0 && filteredMatches.length === 0) {
-            html += `<div class="ml-no-matches">No matches above 70% confidence</div>`;
-        } else {
-            html += `<div class="ml-no-matches">No local matches found</div>`;
-        }
+        html += `<div id="local-matches-body-${missing.node_id}-${missing.widget_index}">`;
+        html += this.renderLocalMatchesContent(missing, missingIndex);
+        html += `</div>`;
         
         // Add all-models search picker - combo-style dropdown
         const comboId = `combo-${missing.node_id}-${missing.widget_index}`;
@@ -4615,6 +4685,7 @@ class LinkerManagerDialog extends ComfyDialog {
                                 this.downloadModel(missing);
                             });
                         }
+                        this.refreshUrnLocalMatches(missing);
                     }
                 } else if (downloadEl) {
                     downloadEl.innerHTML = `<div class="ml-download-info">Unable to resolve direct download for this URN.</div>`;

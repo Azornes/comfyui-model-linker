@@ -68,7 +68,11 @@ class ModelLinkerExtension:
 
             # Import linker modules
             try:
-                from .core.linker import analyze_and_find_matches, apply_resolution
+                from .core.linker import (
+                    analyze_and_find_matches,
+                    apply_resolution,
+                    search_local_matches,
+                )
                 from .core.scanner import get_model_files
             except ImportError as e:
                 self.logger.error(f"Model Linker: Could not import core modules: {e}")
@@ -284,6 +288,70 @@ class ModelLinkerExtension:
                     return web.json_response(
                         {"error": str(e), "success": False}, status=500
                     )
+
+            @routes.post("/model_linker/local-matches")
+            async def local_matches(request):
+                """Search local model files by filename/path."""
+                try:
+                    data = await request.json()
+                    filename = data.get("filename", "")
+                    category = data.get("category", "")
+
+                    if not filename:
+                        return web.json_response(
+                            {"error": "filename is required"}, status=400
+                        )
+
+                    matches = search_local_matches(
+                        filename,
+                        category=category or None,
+                        similarity_threshold=0.0,
+                        max_matches_per_model=10,
+                    )
+                    return web.json_response({"matches": matches})
+                except Exception as e:
+                    self.logger.error(
+                        f"Model Linker local-matches error: {e}", exc_info=True
+                    )
+                    return web.json_response({"error": str(e)}, status=500)
+
+            @routes.post("/model_linker/open-containing-folder")
+            async def open_containing_folder(request):
+                """Open Explorer at the folder containing the selected model."""
+                try:
+                    import os
+                    import subprocess
+
+                    data = await request.json()
+                    target_path = data.get("path", "")
+
+                    if not target_path:
+                        return web.json_response(
+                            {"error": "path is required"}, status=400
+                        )
+
+                    normalized_path = os.path.normpath(target_path)
+                    if not os.path.exists(normalized_path):
+                        return web.json_response(
+                            {"error": "path does not exist"}, status=404
+                        )
+
+                    if os.path.isfile(normalized_path):
+                        absolute_path = os.path.abspath(normalized_path)
+                        subprocess.Popen(
+                            ["explorer.exe", "/select,", absolute_path],
+                            shell=False,
+                        )
+                    else:
+                        os.startfile(normalized_path)
+
+                    return web.json_response({"success": True})
+                except Exception as e:
+                    self.logger.error(
+                        f"Model Linker open-containing-folder error: {e}",
+                        exc_info=True,
+                    )
+                    return web.json_response({"error": str(e)}, status=500)
 
             @routes.get("/model_linker/models")
             async def get_models(request):
@@ -744,6 +812,9 @@ class ModelLinkerExtension:
                                         results["civitai"] = {
                                             "source": "civitai",
                                             "name": model_info.get("model_name"),
+                                            "version_name": model_info.get(
+                                                "version_name"
+                                            ),
                                             "filename": model_info.get(
                                                 "expected_filename"
                                             ),

@@ -30,6 +30,61 @@ URL_PATTERN = re.compile(r'(https?://(?:huggingface\.co|civitai\.com)[^\s"\'<>\)
 MODEL_EXTENSIONS = (".safetensors", ".ckpt", ".pt", ".pth", ".bin", ".onnx", ".gguf")
 
 
+def search_local_matches(
+    target_for_matching: str,
+    category: Optional[str] = None,
+    similarity_threshold: float = 0.0,
+    max_matches_per_model: int = 10,
+) -> List[Dict[str, Any]]:
+    """
+    Search local model files using the same matcher as workflow analysis.
+
+    Args:
+        target_for_matching: Filename/path to match against local files
+        category: Optional category hint to prioritize/filter candidates
+        similarity_threshold: Minimum similarity score (0.0 to 1.0)
+        max_matches_per_model: Maximum number of matches to return
+
+    Returns:
+        Deduplicated list of local matches sorted by similarity
+    """
+    available_models = get_model_files()
+
+    candidates = available_models
+    if category and category != "unknown":
+        candidates = [m for m in available_models if m.get("category") == category]
+        candidates.extend(
+            [m for m in available_models if m.get("category") != category]
+        )
+
+    matches = find_matches(
+        target_for_matching,
+        candidates,
+        threshold=similarity_threshold,
+        max_results=max_matches_per_model,
+    )
+
+    seen_absolute_paths = {}
+    deduplicated_matches = []
+    for match in matches:
+        model_dict = match["model"]
+        absolute_path = model_dict.get("path", "")
+        if absolute_path:
+            absolute_path = os.path.normpath(absolute_path)
+
+        if absolute_path not in seen_absolute_paths:
+            seen_absolute_paths[absolute_path] = match
+            deduplicated_matches.append(match)
+        else:
+            existing_match = seen_absolute_paths[absolute_path]
+            if match["confidence"] > existing_match["confidence"]:
+                idx = deduplicated_matches.index(existing_match)
+                deduplicated_matches[idx] = match
+                seen_absolute_paths[absolute_path] = match
+
+    return deduplicated_matches
+
+
 def extract_workflow_urls(workflow_json: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     """
     Extract model URLs from workflow JSON.
