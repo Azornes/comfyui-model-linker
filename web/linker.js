@@ -1246,27 +1246,29 @@ class LinkerManagerDialog extends ComfyDialog {
         styles.textContent = `
             /* CSS Variables for Model Linker */
             :root {
-                --ml-bg: #1b1d20;
-                --ml-bg-soft: #20242a;
-                --ml-card-bg: rgba(255, 255, 255, 0.028);
-                --ml-card-bg-alt: rgba(255, 255, 255, 0.04);
-                --ml-panel-bg: rgba(255, 255, 255, 0.03);
-                --ml-panel-bg-strong: rgba(255, 255, 255, 0.05);
-                --ml-border: rgba(255, 255, 255, 0.09);
+                --ml-bg: #121212;
+                --ml-bg-soft: #171717;
+                --ml-surface-elevated: #232323;
+                --ml-card-bg: #1a1a1a;
+                --ml-card-bg-alt: #1d1d1d;
+                --ml-panel-bg: #202020;
+                --ml-panel-bg-strong: #262626;
+                --ml-border: rgba(255, 255, 255, 0.08);
                 --ml-border-strong: rgba(255, 255, 255, 0.14);
-                --ml-divider: rgba(255, 255, 255, 0.07);
-                --ml-text: #eef2f7;
-                --ml-text-muted: #a5afbd;
-                --ml-text-dim: #748091;
-                --ml-accent: #3fb950;
-                --ml-accent-hover: #35a246;
-                --ml-accent-blue: #4ea1ff;
-                --ml-warning: #ffb648;
-                --ml-confidence-high: #4CAF50;
-                --ml-confidence-medium: #FFC107;
-                --ml-confidence-low: #f44336;
-                --ml-link-color: #8fc2ff;
-                --ml-shadow: 0 14px 34px rgba(0,0,0,0.24);
+                --ml-divider: rgba(255, 255, 255, 0.08);
+                --ml-text: #f3f3f3;
+                --ml-text-muted: #b1b1b1;
+                --ml-text-dim: #7b7b7b;
+                --ml-text-soft: #dfdfdf;
+                --ml-accent: #72d38a;
+                --ml-accent-hover: #88de9e;
+                --ml-accent-blue: #72d38a;
+                --ml-warning: #e1b24d;
+                --ml-confidence-high: #72d38a;
+                --ml-confidence-medium: #e1b24d;
+                --ml-confidence-low: #e06a6a;
+                --ml-link-color: #d8d8d8;
+                --ml-shadow: 0 18px 42px rgba(0,0,0,0.28);
                 --ml-radius-sm: 8px;
                 --ml-radius-md: 12px;
                 --ml-radius-lg: 16px;
@@ -1280,7 +1282,7 @@ class LinkerManagerDialog extends ComfyDialog {
                 margin-bottom: 10px;
                 padding: 10px 12px;
                 border-radius: var(--ml-radius-lg);
-                background: linear-gradient(135deg, rgba(78,161,255,0.12) 0%, rgba(63,185,80,0.09) 100%);
+                background: linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%);
                 border: 1px solid var(--ml-border-strong);
                 box-shadow: var(--ml-shadow);
             }
@@ -1306,20 +1308,21 @@ class LinkerManagerDialog extends ComfyDialog {
                 background: var(--ml-card-bg);
                 border: 1px solid transparent;
                 border-radius: var(--ml-radius-lg);
-                padding: 10px;
-                margin-bottom: 8px;
+                padding: 12px;
+                margin-bottom: 10px;
                 transition: transform 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
-                box-shadow: inset 0 0 0 1px rgba(255,255,255,0.025);
+                box-shadow: inset 0 0 0 1px rgba(255,255,255,0.018);
+                font-family: "Segoe UI Variable", "Segoe UI", sans-serif;
             }
             .ml-card:nth-child(even) {
                 background: var(--ml-card-bg-alt);
             }
             .ml-card:hover {
                 transform: translateY(-1px);
-                background: rgba(255,255,255,0.045);
+                background: #232323;
                 box-shadow:
-                    inset 0 0 0 1px rgba(255,255,255,0.04),
-                    0 10px 24px rgba(0,0,0,0.12);
+                    inset 0 0 0 1px rgba(255,255,255,0.05),
+                    0 10px 24px rgba(0,0,0,0.14);
             }
             
             /* Card Header */
@@ -1328,23 +1331,48 @@ class LinkerManagerDialog extends ComfyDialog {
                 align-items: flex-start;
                 justify-content: space-between;
                 gap: 10px;
-                margin-bottom: 6px;
+                margin-bottom: 8px;
             }
             .ml-card-title-wrap {
                 min-width: 0;
                 flex: 1;
+                display: grid;
+                gap: 6px;
+            }
+            .ml-card-title-meta {
+                display: grid;
+                gap: 4px;
             }
             .ml-card-title {
-                font-size: 14px;
-                line-height: 1.28;
+                font-size: 15px;
+                line-height: 1.24;
                 font-weight: 700;
                 color: var(--ml-text);
                 margin: 0;
                 word-break: break-word;
                 letter-spacing: -0.01em;
             }
+            .ml-card-title-eyebrow {
+                display: block;
+                font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
+                font-size: 10px;
+                line-height: 1.35;
+                color: var(--ml-text-dim);
+                word-break: break-all;
+            }
+            .ml-card-title-primary {
+                display: block;
+                color: var(--ml-text-soft);
+            }
+            .ml-card-title-secondary {
+                display: block;
+                font-size: 12px;
+                line-height: 1.4;
+                color: var(--ml-text-muted);
+                word-break: break-word;
+            }
             .ml-card-subtitle {
-                margin-top: 4px;
+                margin-top: 0;
                 display: flex;
                 align-items: center;
                 gap: 4px;
@@ -1355,26 +1383,26 @@ class LinkerManagerDialog extends ComfyDialog {
                 align-items: center;
                 gap: 4px;
                 padding: 2px 7px;
-                background: rgba(255,255,255,0.045);
+                background: rgba(255,255,255,0.04);
                 border: 1px solid rgba(255,255,255,0.06);
                 border-radius: 999px;
                 font-size: 10px;
-                color: #94a0b0;
+                color: #c8c8c8;
                 white-space: nowrap;
                 flex-shrink: 0;
             }
             .ml-node-chip.is-locatable {
                 cursor: pointer;
                 padding-right: 9px;
-                color: #b6c4d6;
-                background: rgba(78,161,255,0.08);
-                border-color: rgba(78,161,255,0.14);
+                color: #f1f1f1;
+                background: rgba(255,255,255,0.08);
+                border-color: rgba(255,255,255,0.12);
                 transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
             }
             .ml-node-chip.is-locatable:hover {
-                background: rgba(78,161,255,0.14);
-                border-color: rgba(78,161,255,0.24);
-                color: #d7e7fb;
+                background: rgba(255,255,255,0.12);
+                border-color: rgba(255,255,255,0.18);
+                color: #ffffff;
                 transform: translateY(-1px);
             }
             .ml-node-chip-icon {
@@ -1385,11 +1413,11 @@ class LinkerManagerDialog extends ComfyDialog {
             .ml-category-chip {
                 display: inline-flex;
                 padding: 2px 7px;
-                background: rgba(78,161,255,0.09);
-                border: 1px solid rgba(78,161,255,0.14);
+                background: rgba(255,255,255,0.045);
+                border: 1px solid rgba(255,255,255,0.07);
                 border-radius: 999px;
                 font-size: 9px;
-                color: #a9c9f5;
+                color: #d3d3d3;
                 text-transform: uppercase;
                 letter-spacing: 0.08em;
                 font-weight: 700;
@@ -1403,13 +1431,15 @@ class LinkerManagerDialog extends ComfyDialog {
                 flex-shrink: 0;
             }
             .ml-inline-civitai-link {
-                color: #ffb648;
-                font-size: 12px;
+                color: var(--ml-text-soft);
+                font-size: 14px;
                 font-weight: 700;
                 text-decoration: none;
+                letter-spacing: -0.01em;
             }
             .ml-inline-civitai-link:hover {
-                text-decoration: underline;
+                color: #ffffff;
+                text-decoration: none;
             }
             
             /* Two-Column Layout */
@@ -1438,24 +1468,24 @@ class LinkerManagerDialog extends ComfyDialog {
                 background: var(--ml-panel-bg);
                 border: 1px solid transparent;
                 border-radius: var(--ml-radius-md);
-                padding: 10px;
-                box-shadow: inset 0 0 0 1px rgba(255,255,255,0.03);
+                padding: 12px;
+                box-shadow: inset 0 0 0 1px rgba(148,163,184,0.06);
             }
             .ml-column-header {
                 font-size: 10px;
                 font-weight: 700;
                 color: var(--ml-text-muted);
                 text-transform: uppercase;
-                letter-spacing: 0.08em;
-                margin-bottom: 8px;
-                padding-bottom: 6px;
+                letter-spacing: 0.1em;
+                margin-bottom: 10px;
+                padding-bottom: 8px;
                 border-bottom: 1px solid var(--ml-divider);
             }
             .ml-muted-note,
             .ml-no-matches {
                 padding: 8px 10px;
                 border-radius: var(--ml-radius-sm);
-                background: rgba(255,255,255,0.02);
+                background: rgba(255,255,255,0.018);
                 border: 1px solid transparent;
                 color: var(--ml-text-muted);
                 font-size: 11px;
@@ -1465,7 +1495,7 @@ class LinkerManagerDialog extends ComfyDialog {
             }
             .ml-inline-note-action:hover {
                 color: var(--ml-text);
-                background: rgba(78,161,255,0.08);
+                background: rgba(255,255,255,0.05);
             }
             
             /* Filename Chips */
@@ -1502,24 +1532,24 @@ class LinkerManagerDialog extends ComfyDialog {
                 border: 1px solid transparent;
             }
             .ml-badge-high {
-                background: rgba(76,175,80,0.12);
-                color: #9cd7a4;
-                border-color: rgba(76,175,80,0.22);
+                background: rgba(114,211,138,0.14);
+                color: #a7e6b6;
+                border-color: rgba(114,211,138,0.22);
             }
             .ml-badge-medium {
-                background: rgba(255,193,7,0.13);
-                color: #f2d27e;
-                border-color: rgba(255,193,7,0.2);
+                background: rgba(225,178,77,0.15);
+                color: #efd391;
+                border-color: rgba(225,178,77,0.2);
             }
             .ml-badge-low {
-                background: rgba(244,67,54,0.12);
-                color: #f2a29d;
-                border-color: rgba(244,67,54,0.22);
+                background: rgba(224,106,106,0.14);
+                color: #efb1b1;
+                border-color: rgba(224,106,106,0.2);
             }
             .ml-badge-neutral {
-                background: rgba(165,175,189,0.1);
-                color: #c5ccd7;
-                border-color: rgba(165,175,189,0.16);
+                background: rgba(255,255,255,0.06);
+                color: #d4d4d4;
+                border-color: rgba(255,255,255,0.1);
             }
             
             /* Match Row */
@@ -1527,20 +1557,20 @@ class LinkerManagerDialog extends ComfyDialog {
                 display: flex;
                 align-items: center;
                 gap: 8px;
-                padding: 6px 8px;
+                padding: 8px 10px;
                 border-radius: var(--ml-radius-sm);
-                margin-bottom: 4px;
-                background: rgba(255,255,255,0.02);
+                margin-bottom: 6px;
+                background: rgba(255,255,255,0.016);
                 border: 1px solid transparent;
                 transition: background 0.15s ease, box-shadow 0.15s ease;
             }
             .ml-match-row:hover {
-                background: rgba(255,255,255,0.045);
-                box-shadow: inset 0 0 0 1px rgba(255,255,255,0.035);
+                background: rgba(255,255,255,0.032);
+                box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08);
             }
             .ml-match-row.ml-best-match {
-                background: rgba(63,185,80,0.09);
-                box-shadow: inset 0 0 0 1px rgba(63,185,80,0.16);
+                background: rgba(114,211,138,0.08);
+                box-shadow: inset 0 0 0 1px rgba(114,211,138,0.16);
             }
             .ml-match-filename {
                 flex: 1;
@@ -1549,8 +1579,8 @@ class LinkerManagerDialog extends ComfyDialog {
                 text-overflow: ellipsis;
                 white-space: nowrap;
                 font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
-                font-size: 11px;
-                color: var(--ml-text);
+                font-size: 11.5px;
+                color: var(--ml-text-soft);
             }
             
             /* Buttons */
@@ -1583,29 +1613,29 @@ class LinkerManagerDialog extends ComfyDialog {
                 background: var(--ml-accent-hover);
             }
             .ml-btn-secondary {
-                background: rgba(255,255,255,0.045);
+                background: rgba(255,255,255,0.03);
                 color: var(--ml-text);
-                border-color: rgba(255,255,255,0.08);
-                box-shadow: inset 0 1px 0 rgba(255,255,255,0.025);
+                border-color: rgba(255,255,255,0.1);
+                box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);
             }
             .ml-btn-secondary:hover:not(:disabled) {
-                background: rgba(255,255,255,0.07);
-                border-color: rgba(255,255,255,0.13);
+                background: rgba(255,255,255,0.05);
+                border-color: rgba(255,255,255,0.16);
                 transform: translateY(-1px);
             }
             .ml-btn-link {
                 background: var(--ml-accent-blue);
-                color: white;
-                box-shadow: 0 8px 18px rgba(78,161,255,0.22);
+                color: #101010;
+                box-shadow: 0 8px 18px rgba(114,211,138,0.18);
             }
             .ml-btn-link:hover:not(:disabled) {
-                background: #1976D2;
+                background: var(--ml-accent-hover);
                 transform: translateY(-1px);
             }
             .ml-btn-download {
                 background: var(--ml-accent);
-                color: white;
-                box-shadow: 0 8px 18px rgba(63,185,80,0.2);
+                color: #101010;
+                box-shadow: 0 8px 18px rgba(114,211,138,0.18);
             }
             .ml-btn-download:hover:not(:disabled) {
                 background: var(--ml-accent-hover);
@@ -1625,20 +1655,21 @@ class LinkerManagerDialog extends ComfyDialog {
                 border-radius: 9px;
             }
             .ml-btn-ghost {
-                background: rgba(255,255,255,0.022);
+                background: rgba(255,255,255,0.018);
                 color: var(--ml-text-muted);
-                border-color: rgba(255,255,255,0.065);
+                border-color: rgba(255,255,255,0.08);
                 box-shadow: none;
             }
             .ml-btn-ghost:hover:not(:disabled) {
-                background: rgba(255,255,255,0.055);
+                background: rgba(255,255,255,0.04);
                 color: var(--ml-text);
-                border-color: rgba(255,255,255,0.12);
+                border-color: rgba(255,255,255,0.14);
             }
             .ml-btn-utility {
                 padding-inline: 8px;
                 font-weight: 600;
                 letter-spacing: 0.01em;
+                color: var(--ml-text-soft);
             }
             .ml-btn-icon-only {
                 width: 28px;
@@ -1660,18 +1691,18 @@ class LinkerManagerDialog extends ComfyDialog {
                 color: var(--ml-text-muted);
             }
             .ml-search-source-btn.ml-btn-primary {
-                box-shadow: 0 8px 18px rgba(63,185,80,0.18);
+                box-shadow: 0 8px 18px rgba(114,211,138,0.14);
             }
             
             /* Download Section */
             .ml-download-section {
                 display: grid;
-                gap: 8px;
-                padding: 9px;
-                background: var(--ml-panel-bg-strong);
+                gap: 10px;
+                padding: 11px;
+                background: var(--ml-surface-elevated);
                 border-radius: var(--ml-radius-md);
                 border: 1px solid transparent;
-                box-shadow: inset 0 0 0 1px rgba(255,255,255,0.03);
+                box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05);
             }
             .ml-status-inline {
                 display: flex;
@@ -1683,7 +1714,7 @@ class LinkerManagerDialog extends ComfyDialog {
                 font-size: 11px;
                 color: var(--ml-text-muted);
                 margin-top: 0;
-                line-height: 1.45;
+                line-height: 1.55;
             }
             .ml-download-source {
                 color: var(--ml-accent);
@@ -1705,8 +1736,8 @@ class LinkerManagerDialog extends ComfyDialog {
             }
             .ml-combo-section {
                 position: relative;
-                margin-top: 9px;
-                padding-top: 9px;
+                margin-top: 12px;
+                padding-top: 12px;
                 border-top: 1px solid var(--ml-divider);
             }
             .ml-combo-row {
@@ -1720,25 +1751,25 @@ class LinkerManagerDialog extends ComfyDialog {
                 font-size: 10px;
                 color: var(--ml-text-muted);
                 font-weight: 600;
-                min-width: 38px;
-                letter-spacing: 0.04em;
+                min-width: 42px;
+                letter-spacing: 0.08em;
                 text-transform: uppercase;
             }
             .ml-combo-input {
                 flex: 1;
                 min-width: 0;
-                min-height: 30px;
-                padding: 6px 9px;
-                background: rgba(255,255,255,0.03);
+                min-height: 34px;
+                padding: 7px 11px;
+                background: rgba(12,16,22,0.5);
                 color: var(--ml-text);
-                border: 1px solid var(--ml-border);
-                border-radius: 8px;
+                border: 1px solid rgba(255,255,255,0.1);
+                border-radius: 10px;
                 font-size: 12px;
                 outline: none;
             }
             .ml-combo-input:focus {
-                border-color: rgba(78,161,255,0.45);
-                box-shadow: 0 0 0 2px rgba(78,161,255,0.12);
+                border-color: rgba(114,211,138,0.4);
+                box-shadow: 0 0 0 2px rgba(114,211,138,0.12);
             }
             .ml-combo-list {
                 position: absolute;
@@ -1875,17 +1906,18 @@ class LinkerManagerDialog extends ComfyDialog {
                 align-items: center;
                 gap: 10px;
                 flex-wrap: wrap;
-                padding: 16px 20px;
-                background: linear-gradient(to top, var(--ml-bg) 0%, var(--ml-bg) 70%, transparent 100%);
+                padding: 14px 18px;
+                background: linear-gradient(to top, rgba(18,18,18,0.98) 0%, rgba(18,18,18,0.92) 70%, transparent 100%);
                 border-top: 1px solid var(--ml-border);
             }
             .ml-footer-btn {
-                min-height: 34px;
-                min-width: 152px;
-                padding: 7px 14px;
+                min-height: 32px;
+                min-width: 144px;
+                padding: 7px 13px;
                 font-size: 12px;
                 border-radius: 9px;
                 line-height: 1;
+                backdrop-filter: blur(10px);
             }
 
             /* Tabs */
@@ -1896,15 +1928,15 @@ class LinkerManagerDialog extends ComfyDialog {
                 padding: 7px 16px 0 16px;
                 margin-bottom: 0;
                 background:
-                    linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%);
+                    linear-gradient(180deg, rgba(255,255,255,0.02) 0%, rgba(255,255,255,0.005) 100%);
                 position: relative;
                 z-index: 2;
             }
             .ml-tab {
                 position: relative;
                 padding: 8px 13px 9px 13px;
-                background: linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.025) 100%);
-                border: 1px solid rgba(255,255,255,0.08);
+                background: linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.015) 100%);
+                border: 1px solid rgba(255,255,255,0.1);
                 border-bottom: none;
                 border-top-left-radius: 11px;
                 border-top-right-radius: 11px;
@@ -1912,26 +1944,26 @@ class LinkerManagerDialog extends ComfyDialog {
                 font-size: 12px;
                 font-weight: 600;
                 cursor: pointer;
-                box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+                box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
                 transform: translateY(4px);
                 opacity: 0.8;
                 transition: transform 0.18s ease, opacity 0.18s ease, color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
             }
             .ml-tab:hover {
                 color: var(--ml-text, #e0e0e0);
-                background: linear-gradient(180deg, rgba(255,255,255,0.075) 0%, rgba(255,255,255,0.04) 100%);
-                border-color: rgba(255,255,255,0.12);
+                background: linear-gradient(180deg, rgba(255,255,255,0.045) 0%, rgba(255,255,255,0.022) 100%);
+                border-color: rgba(255,255,255,0.14);
                 transform: translateY(2px);
                 opacity: 0.96;
             }
             .ml-tab.ml-tab-active {
                 color: var(--ml-text, #eef2f7);
-                background: var(--ml-bg, #222);
-                border-color: rgba(255,255,255,0.1);
+                background: #1e1e1e;
+                border-color: rgba(255,255,255,0.16);
                 box-shadow:
-                    0 -10px 24px rgba(0,0,0,0.14),
-                    0 10px 20px rgba(0,0,0,0.16),
-                    inset 0 1px 0 rgba(255,255,255,0.05);
+                    0 -10px 24px rgba(0,0,0,0.12),
+                    0 10px 20px rgba(0,0,0,0.14),
+                    inset 0 1px 0 rgba(255,255,255,0.03);
                 transform: translateY(1px);
                 opacity: 1;
                 z-index: 3;
@@ -1943,7 +1975,7 @@ class LinkerManagerDialog extends ComfyDialog {
                 right: 0;
                 bottom: -6px;
                 height: 8px;
-                background: var(--ml-bg, #222);
+                background: #1e1e1e;
                 border-bottom-left-radius: 8px;
                 border-bottom-right-radius: 8px;
             }
@@ -4710,17 +4742,22 @@ class LinkerManagerDialog extends ComfyDialog {
         html += `<div class="ml-card-header">`;
         html += `<div class="ml-card-title-wrap">`;
         
-        // Always show the URN/ filename first
-        let titleHtml = `<span title="${missingFilename.full}">${missingFilename.display}</span>`;
+        const titleMetaParts = [];
+        let titlePrimaryHtml = `<span class="ml-card-title-primary" title="${missingFilename.full}">${missingFilename.display}</span>`;
+        let titleSecondaryHtml = '';
         
         const modelId = missing.urn_model_id || missing.urn?.model_id;
         const versionId = missing.urn_version_id || missing.urn?.version_id;
         const modelUrl = missing.is_urn && modelId ? `https://civitai.com/models/${modelId}${versionId ? '?modelVersionId=' + versionId : ''}` : '';
         const urnLoadingId = `urn-loading-${missing.node_id}-${missing.widget_index}`;
+
+        if (missing.is_urn) {
+            titleMetaParts.push(`<span class="ml-card-title-eyebrow" title="${missingFilename.full}">${missingFilename.display}</span>`);
+        }
         
         if (missing.is_urn && !missing.civitai_info) {
             // URN without info - show Loading and fetch async in background
-            titleHtml += ` <span id="${urnLoadingId}" style="color: var(--ml-text-muted); font-size: 12px;">⏳ Loading...</span>`;
+            titlePrimaryHtml = `<span class="ml-card-title-primary" id="${urnLoadingId}">Resolving CivitAI model...</span>`;
             setTimeout(() => this.resolveUrnAsync(modelId, versionId, urnLoadingId, modelUrl), 10);
         } else if (missing.is_urn && missing.civitai_info) {
             // URN with resolved info - show model name/version
@@ -4734,14 +4771,20 @@ class LinkerManagerDialog extends ComfyDialog {
             }
             if (civitaiLabel) {
                 const linkHtml = modelUrl ? `<a href="${modelUrl}" target="_blank" class="ml-inline-civitai-link">${civitaiLabel}</a>` : `<span class="ml-inline-civitai-link">${civitaiLabel}</span>`;
-                titleHtml += ` ${linkHtml}`;
+                titlePrimaryHtml = `<span class="ml-card-title-primary">${linkHtml}</span>`;
             }
             if (civitaiInfo.expected_filename) {
-                titleHtml += ` <span style="color: var(--ml-text-muted); font-size: 11px;">"${civitaiInfo.expected_filename}"</span>`;
+                titleSecondaryHtml = `<span class="ml-card-title-secondary">Expected file: ${civitaiInfo.expected_filename}</span>`;
             }
         }
         
-        html += `<h3 class="ml-card-title">${titleHtml}</h3>`;
+        html += `<div class="ml-card-title-meta">`;
+        html += titleMetaParts.join('');
+        html += `<h3 class="ml-card-title">${titlePrimaryHtml}</h3>`;
+        if (titleSecondaryHtml) {
+            html += titleSecondaryHtml;
+        }
+        html += `</div>`;
         const locateId = `locate-${missing.node_id}-${missing.widget_index}`;
         const nodeChipClasses = missing.is_top_level !== false ? 'ml-node-chip is-locatable' : 'ml-node-chip';
         const nodeChipTitle = missing.is_top_level !== false ? 'Click to locate this node in the graph' : '';
@@ -5664,12 +5707,9 @@ class LinkerManagerDialog extends ComfyDialog {
                 const loadingEl = document.getElementById(loadingElementId);
                 if (loadingEl && data.civitai) {
                     const civitai = data.civitai;
-                    let label = civitai.name || 'Model';
-                    if (civitai.filename && civitai.filename !== civitai.name) {
-                        label += ` (${civitai.filename})`;
-                    }
+                    const label = civitai.name || civitai.filename || 'Model';
                     const url = modelUrl || `https://civitai.com/models/${modelId}?modelVersionId=${versionId}`;
-                    loadingEl.innerHTML = `<a href="${url}" target="_blank" style="color: #FF9800; font-size: 12px; font-weight: 600; text-decoration: none;">${label}</a>`;
+                    loadingEl.innerHTML = `<a href="${url}" target="_blank" class="ml-inline-civitai-link">${label}</a>`;
                 } else if (loadingEl) {
                     loadingEl.textContent = 'Not found';
                     loadingEl.style.color = 'var(--ml-text-muted)';
