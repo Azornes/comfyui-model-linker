@@ -19,6 +19,7 @@ class LinkerManagerDialog extends ComfyDialog {
         this.pendingResolutions = [];
         this.pendingIndex = new Map(); // key -> index in pendingResolutions
         this.activeDownloads = {};  // Track active downloads
+        this.searchResultCache = new Map();
         this.boundHandleOutsideClick = this.handleOutsideClick.bind(this);
         this.activeTab = 'missing';  // Default tab
         this.fullscreen = false;
@@ -113,6 +114,96 @@ class LinkerManagerDialog extends ComfyDialog {
         document.addEventListener('click', this.boundHandleContextMenuClick);
     }
     
+    /**
+     * Build stable cache key for a missing model entry
+     */
+    getMissingSearchKey(missing) {
+        return `${missing.node_id}:${missing.widget_index}`;
+    }
+
+    /**
+     * Get or initialize search state for a missing model entry
+     */
+    getSearchState(missing) {
+        const key = this.getMissingSearchKey(missing);
+        if (!this.searchResultCache.has(key)) {
+            this.searchResultCache.set(key, {
+                selectedSource: 'all',
+                results: {
+                    popular: null,
+                    model_list: null,
+                    huggingface: null,
+                    civitai: null
+                },
+                lastAttemptSources: [],
+                lastAttemptFound: null
+            });
+        }
+        return this.searchResultCache.get(key);
+    }
+
+    /**
+     * Merge new search results into cached per-source results.
+     * Empty responses do not delete previously found results.
+     */
+    mergeSearchResults(existingResults = {}, newResults = {}) {
+        return {
+            popular: newResults.popular || existingResults.popular || null,
+            model_list: newResults.model_list || existingResults.model_list || null,
+            huggingface: newResults.huggingface || existingResults.huggingface || null,
+            civitai: newResults.civitai || existingResults.civitai || null
+        };
+    }
+
+    /**
+     * Return true when at least one downloadable source was found
+     */
+    hasSearchResults(data = {}) {
+        return !!(data.popular || data.model_list || data.huggingface || data.civitai);
+    }
+
+    /**
+     * Convert source ids to readable labels
+     */
+    getSearchSourceLabel(source) {
+        const labels = {
+            all: 'Everything',
+            local: 'Local Database',
+            huggingface: 'HuggingFace',
+            civitai: 'CivitAI'
+        };
+        return labels[source] || source;
+    }
+
+    /**
+     * Update source selector buttons and helper text for one card
+     */
+    syncSearchSourceUi(missing, container) {
+        if (!container) return;
+
+        const state = this.getSearchState(missing);
+        const buttons = container.querySelectorAll('.ml-search-source-btn');
+        buttons.forEach(btn => {
+            const isActive = btn.dataset.searchSource === state.selectedSource;
+            btn.classList.toggle('ml-btn-primary', isActive);
+            btn.classList.toggle('ml-btn-secondary', !isActive);
+        });
+
+        const infoEl = container.querySelector(`#search-source-info-${missing.node_id}-${missing.widget_index}`);
+        if (infoEl) {
+            infoEl.textContent = `Selected source: ${this.getSearchSourceLabel(state.selectedSource)}`;
+        }
+    }
+
+    /**
+     * Set current search source for one card
+     */
+    setSearchSource(missing, source, container) {
+        const state = this.getSearchState(missing);
+        state.selectedSource = source || 'all';
+        this.syncSearchSourceUi(missing, container);
+    }
+
     /**
      * Handle click outside context menu to hide it
      */
@@ -2644,6 +2735,7 @@ class LinkerManagerDialog extends ComfyDialog {
             }
 
             const data = await response.json();
+            this.searchResultCache.clear();
             this.displayMissingModels(this.contentElement, data);
             
             // Reconnect any active downloads to their new progress divs
@@ -2941,6 +3033,16 @@ class LinkerManagerDialog extends ComfyDialog {
                 searchBtn.addEventListener('click', () => {
                     this.searchOnline(missing);
                 });
+            }
+
+            const sourceButtons = container.querySelectorAll('.ml-search-source-btn');
+            sourceButtons.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    this.setSearchSource(missing, btn.dataset.searchSource, container);
+                });
+            });
+            if (sourceButtons.length > 0) {
+                this.syncSearchSourceUi(missing, container);
             }
             
             // Wire Locate button (only for top-level nodes)
@@ -3248,10 +3350,18 @@ class LinkerManagerDialog extends ComfyDialog {
         } else {
             // No known download - offer search
             html += `<div class="ml-download-section">`;
+            const searchSourcesId = `search-sources-${missing.node_id}-${missing.widget_index}`;
+            const searchInfoId = `search-source-info-${missing.node_id}-${missing.widget_index}`;
+            html += `<div id="${searchSourcesId}" style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px;">`;
+            html += `<button type="button" class="ml-btn ml-btn-secondary ml-btn-sm ml-search-source-btn" data-search-source="local">Local DB</button>`;
+            html += `<button type="button" class="ml-btn ml-btn-secondary ml-btn-sm ml-search-source-btn" data-search-source="huggingface">HuggingFace</button>`;
+            html += `<button type="button" class="ml-btn ml-btn-secondary ml-btn-sm ml-search-source-btn" data-search-source="civitai">CivitAI</button>`;
+            html += `<button type="button" class="ml-btn ml-btn-secondary ml-btn-sm ml-search-source-btn" data-search-source="all">All</button>`;
+            html += `</div>`;
             html += `<button id="search-${missing.node_id}-${missing.widget_index}" class="ml-btn ml-btn-link">`;
             html += `<span class="ml-btn-icon">🔍</span> Search Online`;
             html += `</button>`;
-            html += `<div class="ml-download-info">Search HuggingFace & CivitAI</div>`;
+            html += `<div id="${searchInfoId}" class="ml-download-info">Selected source: Everything</div>`;
             html += `</div>`;
             html += `<div id="search-results-${missing.node_id}-${missing.widget_index}" style="margin-top: 8px; display: none;"></div>`;
         }
@@ -3968,6 +4078,9 @@ class LinkerManagerDialog extends ComfyDialog {
     async searchOnline(missing) {
         let filename = missing.original_path?.split('/').pop()?.split('\\').pop() || '';
         let category = missing.category || '';
+        const state = this.getSearchState(missing);
+        const selectedSource = state.selectedSource || 'all';
+        const selectedSourceLabel = this.getSearchSourceLabel(selectedSource);
         
         // For URNs, use the CivitAI model name for searching instead of the URN itself
         // and pass the URN type as category (CivitAI expects specific type names)
@@ -4003,15 +4116,15 @@ class LinkerManagerDialog extends ComfyDialog {
         try {
             if (searchBtn) {
                 searchBtn.disabled = true;
-                searchBtn.textContent = '🔍 Searching...';
+                searchBtn.textContent = `🔍 Searching ${selectedSourceLabel}...`;
             }
             if (resultsDiv) {
                 resultsDiv.style.display = 'block';
-                resultsDiv.innerHTML = '<span style="color: #2196F3;">Searching HuggingFace and CivitAI...</span>';
+                resultsDiv.innerHTML = `<span style="color: #2196F3;">Searching ${selectedSourceLabel}...</span>`;
             }
 
             // For URNs, include model_id and version_id for direct download
-            const searchData = { filename, category, is_urn: isUrn };
+            const searchData = { filename, category, is_urn: isUrn, sources: [selectedSource] };
             if (isUrn && missing.urn) {
                 searchData.model_id = missing.urn.model_id;
                 searchData.version_id = missing.urn.version_id;
@@ -4031,7 +4144,10 @@ class LinkerManagerDialog extends ComfyDialog {
 
             const data = await response.json();
             console.log('Model Linker: Search response:', JSON.stringify(data));
-            this.displaySearchResults(missing, data, resultsDiv);
+            state.results = this.mergeSearchResults(state.results, data);
+            state.lastAttemptSources = Array.isArray(data.searched_sources) ? data.searched_sources : [selectedSource];
+            state.lastAttemptFound = this.hasSearchResults(data);
+            this.displaySearchResults(missing, state, resultsDiv);
 
         } catch (error) {
             console.error('Model Linker: Search error:', error);
@@ -4061,6 +4177,7 @@ class LinkerManagerDialog extends ComfyDialog {
                 filename: modelId + '_' + versionId,
                 category: '',
                 is_urn: true,
+                sources: ['civitai'],
                 model_id: modelId,
                 version_id: versionId
             };
@@ -4109,21 +4226,31 @@ class LinkerManagerDialog extends ComfyDialog {
     /**
      * Display search results
      */
-    displaySearchResults(missing, data, container) {
+    displaySearchResults(missing, state, container) {
         if (!container) return;
 
-        const popular = data.popular;
-        const modelListResult = data.model_list;
-        const hfResult = data.huggingface ? (Array.isArray(data.huggingface) ? data.huggingface[0] : data.huggingface) : null;
-        const civitaiResult = data.civitai ? (Array.isArray(data.civitai) ? data.civitai[0] : data.civitai) : null;
+        const results = state?.results || {};
+        const popular = results.popular;
+        const modelListResult = results.model_list;
+        const hfResult = results.huggingface ? (Array.isArray(results.huggingface) ? results.huggingface[0] : results.huggingface) : null;
+        const civitaiResult = results.civitai ? (Array.isArray(results.civitai) ? results.civitai[0] : results.civitai) : null;
         const hasResults = popular || modelListResult || hfResult || civitaiResult;
 
         if (!hasResults) {
-            container.innerHTML = this.renderStatusMessage('No matches found online for this model.', 'warning');
+            const searchedLabel = (state?.lastAttemptSources || []).map(source => this.getSearchSourceLabel(source)).join(', ');
+            container.innerHTML = this.renderStatusMessage(
+                searchedLabel ? `No matches found in ${searchedLabel}.` : 'No matches found online for this model.',
+                'warning'
+            );
             return;
         }
 
         let html = '<div style="margin-top: 8px; display: flex; flex-direction: column; gap: 8px;">';
+
+        if (state?.lastAttemptFound === false) {
+            const searchedLabel = (state.lastAttemptSources || []).map(source => this.getSearchSourceLabel(source)).join(', ');
+            html += this.renderStatusMessage(`No new matches found in ${searchedLabel}. Existing results are kept below.`, 'warning');
+        }
 
         // Popular models result (highest priority)
         if (popular) {

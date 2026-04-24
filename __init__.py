@@ -210,7 +210,54 @@ class ModelLinkerExtension:
                                     }
                                     continue
 
-                                # 1. Check popular models (always exact match)
+                                # 1. For URNs, we already have an exact CivitAI identity.
+                                # Expose it immediately as a direct download source.
+                                if missing.get("is_urn"):
+                                    urn_model_id = missing.get("urn_model_id") or (
+                                        missing.get("urn", {}) or {}
+                                    ).get("model_id")
+                                    urn_version_id = missing.get(
+                                        "urn_version_id"
+                                    ) or (missing.get("urn", {}) or {}).get(
+                                        "version_id"
+                                    )
+
+                                    if urn_model_id and urn_version_id:
+                                        civitai_info = resolve_urn(
+                                            urn_model_id, urn_version_id
+                                        )
+                                        if civitai_info:
+                                            missing["civitai_info"] = civitai_info
+                                            expected_filename = (
+                                                civitai_info.get("expected_filename")
+                                                or filename
+                                            )
+                                            primary_file = (
+                                                civitai_info.get("files") or [{}]
+                                            )[0]
+
+                                            missing["download_source"] = {
+                                                "source": "civitai",
+                                                "url": get_civitai_download_url(
+                                                    urn_version_id
+                                                ),
+                                                "filename": expected_filename,
+                                                "name": civitai_info.get(
+                                                    "model_name"
+                                                ),
+                                                "type": missing.get("category"),
+                                                "directory": missing.get(
+                                                    "category", "checkpoints"
+                                                ),
+                                                "match_type": "exact",
+                                                "size": primary_file.get("size"),
+                                                "model_id": urn_model_id,
+                                                "version_id": urn_version_id,
+                                                "model_url": f"https://civitai.com/models/{urn_model_id}?modelVersionId={urn_version_id}",
+                                            }
+                                            continue
+
+                                # 2. Check popular models (always exact match)
                                 popular_info = get_popular_model_url(filename)
                                 if popular_info:
                                     missing["download_source"] = {
@@ -223,7 +270,7 @@ class ModelLinkerExtension:
                                     }
                                     continue
 
-                                # 2. Check model list (ComfyUI Manager database)
+                                # 3. Check model list (ComfyUI Manager database)
                                 # Use exact_only=True to avoid confusing fuzzy matches for downloads
                                 model_list_result = search_model_list(
                                     filename, exact_only=True
@@ -650,9 +697,30 @@ class ModelLinkerExtension:
                                 status=400,
                             )
 
+                        raw_sources = data.get("sources", ["all"])
+                        if isinstance(raw_sources, str):
+                            raw_sources = [raw_sources]
+                        elif not isinstance(raw_sources, list):
+                            raw_sources = ["all"]
+
+                        normalized_sources = {
+                            str(source).strip().lower()
+                            for source in raw_sources
+                            if str(source).strip()
+                        }
+                        if not normalized_sources:
+                            normalized_sources = {"all"}
+
+                        if "all" in normalized_sources:
+                            normalized_sources = {"local", "huggingface", "civitai"}
+
+                        search_local = "local" in normalized_sources
+                        search_huggingface_source = "huggingface" in normalized_sources
+                        search_civitai_source = "civitai" in normalized_sources
+
                         # Debug logging
                         self.logger.info(
-                            f"Search request: filename={filename}, category={category}, is_urn={is_urn}, model_id={data.get('model_id')}, version_id={data.get('version_id')}"
+                            f"Search request: filename={filename}, category={category}, is_urn={is_urn}, model_id={data.get('model_id')}, version_id={data.get('version_id')}, sources={sorted(normalized_sources)}"
                         )
 
                         results = {
@@ -661,26 +729,23 @@ class ModelLinkerExtension:
                             "huggingface": None,
                             "civitai": None,
                             "found": False,
+                            "searched_sources": sorted(normalized_sources),
                         }
 
-                        # 1. Check popular models first (curated database)
-                        popular_info = get_popular_model_url(filename)
-                        if popular_info:
-                            results["popular"] = {
-                                "source": "popular",
-                                "filename": filename,
-                                **popular_info,
-                            }
-                            results["found"] = True
+                        # 1. Search local databases (curated + model-list)
+                        if search_local:
+                            popular_info = get_popular_model_url(filename)
+                            if popular_info:
+                                results["popular"] = {
+                                    "source": "popular",
+                                    "filename": filename,
+                                    **popular_info,
+                                }
+                                results["found"] = True
 
-                        # 2. Search model-list.json (ComfyUI Manager database with fuzzy matching)
-                        # Only accept if confidence >= 70% (or if not URN, allow any)
-                        if not results["found"]:
                             model_list_result = search_model_list(filename)
                             if model_list_result:
                                 confidence = model_list_result.get("confidence", 0)
-                                # For URNs, only accept high-confidence matches (>70%)
-                                # Otherwise continue to CivitAI search for exact model
                                 if is_urn and confidence >= 70:
                                     results["model_list"] = model_list_result
                                     results["found"] = True
@@ -688,15 +753,15 @@ class ModelLinkerExtension:
                                     results["model_list"] = model_list_result
                                     results["found"] = True
 
-                        # 3. Search HuggingFace for exact file match
-                        if not results["found"]:
+                        # 2. Search HuggingFace for exact file match
+                        if search_huggingface_source:
                             hf_result = search_huggingface_for_file(filename)
                             if hf_result:
                                 results["huggingface"] = hf_result
                                 results["found"] = True
 
-                        # 4. Search CivitAI - use direct download for URNs
-                        if not results["found"]:
+                        # 3. Search CivitAI - use direct download for URNs
+                        if search_civitai_source:
                             # For URNs, use direct model_id/version_id to get download URL
                             if is_urn:
                                 # Get model_id and version_id from request data
