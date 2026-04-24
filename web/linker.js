@@ -2504,6 +2504,10 @@ class LinkerManagerDialog extends ComfyDialog {
     async ensureDownloadSubfoldersLoaded(category = '') {
         const key = (category || '').trim().toLowerCase();
         if (!key) return [];
+        if (key === 'unknown') {
+            this.downloadSubfolders.set(key, []);
+            return [];
+        }
         if (this.downloadSubfolders.has(key)) {
             return this.downloadSubfolders.get(key) || [];
         }

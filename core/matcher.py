@@ -6,6 +6,7 @@ Implements fuzzy string matching to find similar model names.
 
 import os
 import re
+import heapq
 from typing import List, Dict, Tuple
 from difflib import SequenceMatcher
 
@@ -98,7 +99,9 @@ def find_matches(
             'confidence': confidence percentage (0 to 100)
         }
     """
-    matches = []
+    # Keep only the best N matches instead of collecting and sorting everything.
+    best_matches = []
+    match_counter = 0
 
     # Normalize path separators in target_model based on current OS
     # This ensures paths with \ vs / separators are treated as identical
@@ -110,6 +113,7 @@ def find_matches(
 
     # Normalize target filename once for exact match comparisons
     target_norm = normalize_filename(target_filename)
+    target_base = os.path.splitext(target_filename)[0]
 
     for candidate in candidate_models:
         # Get filename from candidate (prefer 'filename' key, fallback to extracting from 'path' or 'relative_path')
@@ -126,13 +130,20 @@ def find_matches(
 
         # Normalize candidate path separators based on current OS
         # This ensures paths with \ vs / separators are treated as identical
-        candidate_path_normalized = (
-            os.path.normpath(candidate_path) if candidate_path else ""
-        )
+        candidate_path_normalized = candidate.get("_match_path_norm")
+        if candidate_path_normalized is None:
+            candidate_path_normalized = (
+                os.path.normpath(candidate_path) if candidate_path else ""
+            )
+            candidate["_match_path_norm"] = candidate_path_normalized
+
         candidate_relative_path = candidate.get("relative_path", "")
-        candidate_relative_path_normalized = (
-            os.path.normpath(candidate_relative_path) if candidate_relative_path else ""
-        )
+        candidate_relative_path_normalized = candidate.get("_match_relative_path_norm")
+        if candidate_relative_path_normalized is None:
+            candidate_relative_path_normalized = (
+                os.path.normpath(candidate_relative_path) if candidate_relative_path else ""
+            )
+            candidate["_match_relative_path_norm"] = candidate_relative_path_normalized
 
         # Check if normalized paths are identical (100% match)
         # This handles cases where paths differ only by separator (e.g., path/to/model vs path\to\model)
@@ -149,14 +160,20 @@ def find_matches(
         if path_match:
             # Exact path match after normalization = 100% confidence
             similarity = 1.0
-            matches.append(
-                {
-                    "model": candidate,
-                    "filename": candidate_filename,
-                    "similarity": similarity,
-                    "confidence": round(similarity * 100, 1),
-                }
-            )
+            match = {
+                "model": candidate,
+                "filename": candidate_filename,
+                "similarity": similarity,
+                "confidence": round(similarity * 100, 1),
+            }
+            if max_results <= 0:
+                return []
+            entry = (similarity, match_counter, match)
+            match_counter += 1
+            if len(best_matches) < max_results:
+                heapq.heappush(best_matches, entry)
+            elif similarity > best_matches[0][0]:
+                heapq.heapreplace(best_matches, entry)
             continue
 
         # Calculate similarity comparing just filenames (not paths)
@@ -164,7 +181,10 @@ def find_matches(
 
         # First check for exact match (after normalization) - should be 100%
         # Only exact matches should get 100% confidence
-        candidate_norm = normalize_filename(candidate_filename)
+        candidate_norm = candidate.get("_match_filename_norm")
+        if candidate_norm is None:
+            candidate_norm = normalize_filename(candidate_filename)
+            candidate["_match_filename_norm"] = candidate_norm
 
         if target_norm == candidate_norm:
             # Exact match after normalization = 100% confidence
@@ -177,7 +197,6 @@ def find_matches(
             )
 
             # Also try comparing without extensions for better matching
-            target_base = os.path.splitext(target_filename)[0]
             candidate_base = os.path.splitext(candidate_filename)[0]
             similarity_no_ext = calculate_similarity_with_normalization(
                 target_base, candidate_base
@@ -195,19 +214,19 @@ def find_matches(
 
         # Only include if above threshold
         if similarity >= threshold:
-            matches.append(
-                {
-                    "model": candidate,
-                    "filename": candidate_filename,
-                    "similarity": similarity,
-                    "confidence": round(similarity * 100, 1),  # Convert to percentage
-                }
-            )
+            match = {
+                "model": candidate,
+                "filename": candidate_filename,
+                "similarity": similarity,
+                "confidence": round(similarity * 100, 1),  # Convert to percentage
+            }
+            if max_results <= 0:
+                return []
+            entry = (similarity, match_counter, match)
+            match_counter += 1
+            if len(best_matches) < max_results:
+                heapq.heappush(best_matches, entry)
+            elif similarity > best_matches[0][0]:
+                heapq.heapreplace(best_matches, entry)
 
-    # Sort by similarity (highest first)
-    matches.sort(key=lambda x: x["similarity"], reverse=True)
-
-    # Limit to max_results
-    matches = matches[:max_results]
-
-    return matches
+    return [match for _, _, match in sorted(best_matches, key=lambda x: x[0], reverse=True)]

@@ -28,6 +28,41 @@ _urn_cache: Dict[tuple[int, int], Dict[str, Any]] = {}
 _hash_cache: Dict[str, Dict[str, Any]] = {}
 
 
+def _extract_civitai_image_id(image_url: str) -> Optional[str]:
+    """
+    Extract a CivitAI image ID from an image CDN URL.
+    Example:
+    https://image.civitai.com/.../width=1800/1917130.jpeg -> 1917130
+    """
+    if not image_url:
+        return None
+
+    match = re.search(r"/(\d+)(?:\.[A-Za-z0-9]+)?(?:[?#].*)?$", image_url)
+    if match:
+        return match.group(1)
+
+    return None
+
+
+def _build_civitai_image_url(img: Dict[str, Any]) -> str:
+    """
+    Build a stable CivitAI image page URL from available image metadata.
+    """
+    civitai_url = img.get("civitaiUrl")
+    if civitai_url:
+        return civitai_url
+
+    image_id = img.get("id")
+    if image_id is not None:
+        return f"https://civitai.com/images/{image_id}"
+
+    extracted_id = _extract_civitai_image_id(img.get("url", ""))
+    if extracted_id:
+        return f"https://civitai.com/images/{extracted_id}"
+
+    return ""
+
+
 def parse_civitai_url(url: str) -> Optional[Dict[str, Any]]:
     """
     Parse a CivitAI URL to extract model/version info.
@@ -650,7 +685,7 @@ def _extract_model_images(version_info: Dict[str, Any]) -> List[Dict[str, Any]]:
 
         img_info = {
             "url": img_url,
-            "civitaiUrl": img.get("civitaiUrl", ""),
+            "civitaiUrl": _build_civitai_image_url(img),
             "seed": img.get("seed") or meta.get("seed"),
             "steps": img.get("steps") or meta.get("steps"),
             "cfg": img.get("cfg") or meta.get("cfg"),
@@ -743,8 +778,7 @@ def _metadata_to_model_info(metadata: Dict[str, Any]) -> Dict[str, Any]:
             images.append(
                 {
                     "url": img.get("url", ""),
-                    "civitaiUrl": img.get("civitaiUrl", "")
-                    or f"https://civitai.com/images/{img.get('id')}",
+                    "civitaiUrl": _build_civitai_image_url(img),
                     "seed": img_meta.get("seed"),
                     "steps": img_meta.get("steps"),
                     "cfg": img_meta.get("cfg"),

@@ -5,7 +5,8 @@ Scans configured model directories and finds available model files.
 """
 
 import os
-from typing import List, Dict, Tuple
+import time
+from typing import List, Dict, Tuple, Optional
 
 from .log_system.log_funcs import (
     log_debug,
@@ -36,6 +37,10 @@ MODEL_EXTENSIONS = {
     ".onnx",
     ".gguf",
 }
+
+_MODEL_FILES_CACHE: Optional[List[Dict[str, str]]] = None
+_MODEL_FILES_CACHE_AT: float = 0.0
+_MODEL_FILES_CACHE_TTL_SECONDS = 2.0
 
 
 def get_model_directories() -> Dict[str, Tuple[List[str], set]]:
@@ -199,13 +204,36 @@ def scan_all_directories() -> List[Dict[str, str]]:
     return all_models
 
 
-def get_model_files() -> List[Dict[str, str]]:
+def invalidate_model_files_cache() -> None:
+    """Clear the in-memory model file cache."""
+    global _MODEL_FILES_CACHE, _MODEL_FILES_CACHE_AT
+    _MODEL_FILES_CACHE = None
+    _MODEL_FILES_CACHE_AT = 0.0
+
+
+def get_model_files(force_rescan: bool = False) -> List[Dict[str, str]]:
     """
     Get list of all available model files with metadata.
 
     This is the main entry point for getting model files.
 
+    Args:
+        force_rescan: If True, bypass the short-lived cache and rescan directories
+
     Returns:
         List of model dictionaries (same format as scan_directory)
     """
-    return scan_all_directories()
+    global _MODEL_FILES_CACHE, _MODEL_FILES_CACHE_AT
+
+    now = time.monotonic()
+    if (
+        not force_rescan
+        and _MODEL_FILES_CACHE is not None
+        and (now - _MODEL_FILES_CACHE_AT) < _MODEL_FILES_CACHE_TTL_SECONDS
+    ):
+        return _MODEL_FILES_CACHE
+
+    models = scan_all_directories()
+    _MODEL_FILES_CACHE = models
+    _MODEL_FILES_CACHE_AT = now
+    return models

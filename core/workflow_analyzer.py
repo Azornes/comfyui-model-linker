@@ -166,7 +166,9 @@ def try_resolve_model_path(
     return None
 
 
-def get_node_model_info(node: Dict[str, Any]) -> List[Dict[str, Any]]:
+def get_node_model_info(
+    node: Dict[str, Any], available_models: Optional[List[Dict[str, Any]]] = None
+) -> List[Dict[str, Any]]:
     """
     Extract model references from a single node.
 
@@ -225,7 +227,7 @@ def get_node_model_info(node: Dict[str, Any]) -> List[Dict[str, Any]]:
         # Get all lora files using scanner for recursive search
         from .scanner import get_model_files
 
-        all_loras = get_model_files()
+        all_loras = available_models if available_models is not None else get_model_files()
         lora_files = [m for m in all_loras if m.get("category") == "loras"]
 
         # Build a lookup by filename (without extension)
@@ -407,7 +409,10 @@ def get_node_model_info(node: Dict[str, Any]) -> List[Dict[str, Any]]:
     return model_refs
 
 
-def analyze_workflow_models(workflow_json: Dict[str, Any]) -> List[Dict[str, Any]]:
+def analyze_workflow_models(
+    workflow_json: Dict[str, Any],
+    available_models: Optional[List[Dict[str, Any]]] = None,
+) -> List[Dict[str, Any]]:
     """
     Extract all model references from a workflow, including nested subgraphs.
 
@@ -429,7 +434,7 @@ def analyze_workflow_models(workflow_json: Dict[str, Any]) -> List[Dict[str, Any
     nodes = workflow_json.get("nodes", [])
     for node in nodes:
         try:
-            model_refs = get_node_model_info(node)
+            model_refs = get_node_model_info(node, available_models=available_models)
             node_type = node.get("type", "")
 
             # Check if node type is a subgraph UUID
@@ -467,7 +472,7 @@ def analyze_workflow_models(workflow_json: Dict[str, Any]) -> List[Dict[str, Any
 
         for node in subgraph_nodes:
             try:
-                model_refs = get_node_model_info(node)
+                model_refs = get_node_model_info(node, available_models=available_models)
                 # Mark as belonging to this subgraph definition
                 for ref in model_refs:
                     ref["subgraph_id"] = subgraph_id

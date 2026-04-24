@@ -269,10 +269,21 @@ def analyze_and_find_matches(
     log_debug(f"Extracted {len(workflow_urls)} URLs from workflow")
 
     # Analyze workflow to find all model references
-    all_model_refs = analyze_workflow_models(workflow_json)
-
     # Get available models
     available_models = get_model_files()
+    available_models_by_category = {}
+    for model in available_models:
+        model_category = model.get("category", "")
+        if model_category not in available_models_by_category:
+            available_models_by_category[model_category] = []
+        available_models_by_category[model_category].append(model)
+
+    ordered_candidates_cache: Dict[str, List[Dict[str, Any]]] = {}
+
+    # Analyze workflow using the same already-scanned model list
+    all_model_refs = analyze_workflow_models(
+        workflow_json, available_models=available_models
+    )
 
     # Identify missing models
     missing_models = identify_missing_models(all_model_refs, available_models)
@@ -317,6 +328,19 @@ def analyze_and_find_matches(
         # For URNs, prefer expected_filename for matching
         if missing.get("is_urn") and missing.get("expected_filename"):
             target_for_matching = missing["expected_filename"]
+        elif isinstance(target_for_matching, str) and target_for_matching.startswith(
+            "urn:air:"
+        ):
+            # Don't fuzzy-match the full URN string against every local model.
+            # For worker-asset style URNs, try using the filename-like suffix after "@";
+            # otherwise skip local matching until the frontend resolves the URN async.
+            urn_suffix = target_for_matching.split("@", 1)[1] if "@" in target_for_matching else ""
+            urn_suffix_ext = os.path.splitext(urn_suffix)[1].lower()
+            if urn_suffix and urn_suffix_ext in MODEL_EXTENSIONS:
+                target_for_matching = urn_suffix
+            else:
+                missing_with_matches.append({**missing, "matches": []})
+                continue
 
         # Filter available models by category if known
         category = missing.get("category")
@@ -328,10 +352,14 @@ def analyze_and_find_matches(
 
         candidates = available_models
         if category and category != "unknown":
-            candidates = [m for m in available_models if m.get("category") == category]
-            candidates.extend(
-                [m for m in available_models if m.get("category") != category]
-            )
+            candidates = ordered_candidates_cache.get(category)
+            if candidates is None:
+                preferred = available_models_by_category.get(category, [])
+                others = [
+                    m for m in available_models if m.get("category") != category
+                ]
+                candidates = preferred + others
+                ordered_candidates_cache[category] = candidates
 
         # Find matches
         matches = find_matches(

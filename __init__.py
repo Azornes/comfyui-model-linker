@@ -1040,6 +1040,16 @@ class ModelLinkerExtension:
                         }
                         category = category_map.get(raw_category.lower(), raw_category.lower())
 
+                        if not category or category == "unknown":
+                            return web.json_response([])
+
+                        known_categories = set(folder_paths.folder_names_and_paths.keys())
+                        if category not in known_categories:
+                            self.logger.debug(
+                                f"Model Linker: skipping subfolder lookup for unknown category '{raw_category}' -> '{category}'"
+                            )
+                            return web.json_response([])
+
                         subfolders = set()
                         filenames = folder_paths.get_filename_list(category) or []
                         for rel_path in filenames:
