@@ -1654,6 +1654,77 @@ class LinkerManagerDialog extends ComfyDialog {
                 color: #f44336;
                 font-size: 12px;
             }
+
+            .ml-options-wrap {
+                max-width: 760px;
+                margin: 0 auto;
+                display: flex;
+                flex-direction: column;
+                gap: 16px;
+            }
+            .ml-options-card {
+                background: var(--ml-card-bg);
+                border: 1px solid var(--ml-border);
+                border-radius: var(--ml-radius-lg);
+                padding: 18px;
+                box-shadow: 0 6px 20px rgba(0,0,0,0.14);
+            }
+            .ml-options-title {
+                margin: 0 0 6px 0;
+                font-size: 16px;
+                font-weight: 700;
+                color: var(--ml-text);
+            }
+            .ml-options-subtitle {
+                margin: 0 0 16px 0;
+                font-size: 12px;
+                color: var(--ml-text-muted);
+                line-height: 1.5;
+            }
+            .ml-options-grid {
+                display: grid;
+                gap: 14px;
+            }
+            .ml-options-field {
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
+            }
+            .ml-options-label {
+                font-size: 12px;
+                font-weight: 700;
+                color: var(--ml-text);
+            }
+            .ml-options-help {
+                font-size: 12px;
+                color: var(--ml-text-muted);
+                line-height: 1.45;
+            }
+            .ml-options-input {
+                width: 100%;
+                padding: 10px 12px;
+                background: rgba(255,255,255,0.04);
+                color: var(--ml-text);
+                border: 1px solid var(--ml-border);
+                border-radius: 10px;
+                font-size: 13px;
+                outline: none;
+            }
+            .ml-options-input:focus {
+                border-color: rgba(78,161,255,0.45);
+                box-shadow: 0 0 0 3px rgba(78,161,255,0.12);
+            }
+            .ml-options-actions {
+                display: flex;
+                gap: 8px;
+                flex-wrap: wrap;
+                margin-top: 8px;
+            }
+            .ml-options-status {
+                margin-top: 10px;
+                font-size: 12px;
+                color: var(--ml-text-muted);
+            }
         `;
         
         document.head.appendChild(styles);
@@ -1811,6 +1882,11 @@ class LinkerManagerDialog extends ComfyDialog {
             textContent: "Loaded Models",
             onclick: () => this.switchTab('loaded')
         });
+
+        this.optionsTab = $el("button.ml-tab", {
+            textContent: "Options",
+            onclick: () => this.switchTab('options')
+        });
         
         return $el("div", {
             style: {
@@ -1901,7 +1977,8 @@ class LinkerManagerDialog extends ComfyDialog {
             ]),
             $el("div.ml-tabs", {}, [
                 this.missingTab,
-                this.loadedTab
+                this.loadedTab,
+                this.optionsTab
             ])
         ]);
     }
@@ -2067,12 +2144,77 @@ class LinkerManagerDialog extends ComfyDialog {
         }
     }
 
+    getStoredTokens() {
+        return {
+            civitai_key: localStorage.getItem('modelLinker.civitaiApiKey') || '',
+            hf_token: localStorage.getItem('modelLinker.huggingFaceToken') || ''
+        };
+    }
+
+    displayOptions() {
+        if (!this.contentElement) return;
+
+        const tokens = this.getStoredTokens();
+        this.contentElement.innerHTML = `
+            <div class="ml-options-wrap">
+                <div class="ml-options-card">
+                    <h3 class="ml-options-title">API Tokens</h3>
+                    <p class="ml-options-subtitle">Stored locally in your browser. Used only for downloads that require authentication.</p>
+                    <div class="ml-options-grid">
+                        <div class="ml-options-field">
+                            <label for="ml-options-civitai" class="ml-options-label">CivitAI API Key</label>
+                            <input id="ml-options-civitai" class="ml-options-input" type="password" placeholder="Paste CivitAI API key" value="${tokens.civitai_key}">
+                            <div class="ml-options-help">Used for direct CivitAI downloads that otherwise return HTTP 401 or 403.</div>
+                        </div>
+                        <div class="ml-options-field">
+                            <label for="ml-options-hf" class="ml-options-label">HuggingFace Token</label>
+                            <input id="ml-options-hf" class="ml-options-input" type="password" placeholder="Paste HuggingFace token" value="${tokens.hf_token}">
+                            <div class="ml-options-help">Used for gated HuggingFace repos that need authorization during download.</div>
+                        </div>
+                    </div>
+                    <div class="ml-options-actions">
+                        <button id="ml-options-save" class="ml-btn ml-btn-primary">Save Tokens</button>
+                        <button id="ml-options-clear" class="ml-btn ml-btn-secondary">Clear Tokens</button>
+                    </div>
+                    <div id="ml-options-status" class="ml-options-status">Saved only on this machine.</div>
+                </div>
+            </div>
+        `;
+
+        const civitaiInput = this.contentElement.querySelector('#ml-options-civitai');
+        const hfInput = this.contentElement.querySelector('#ml-options-hf');
+        const status = this.contentElement.querySelector('#ml-options-status');
+        const saveBtn = this.contentElement.querySelector('#ml-options-save');
+        const clearBtn = this.contentElement.querySelector('#ml-options-clear');
+
+        if (saveBtn) {
+            saveBtn.addEventListener('click', () => {
+                localStorage.setItem('modelLinker.civitaiApiKey', civitaiInput?.value || '');
+                localStorage.setItem('modelLinker.huggingFaceToken', hfInput?.value || '');
+                if (status) status.textContent = 'Tokens saved locally.';
+                this.showNotification('API tokens saved', 'success');
+            });
+        }
+
+        if (clearBtn) {
+            clearBtn.addEventListener('click', () => {
+                localStorage.removeItem('modelLinker.civitaiApiKey');
+                localStorage.removeItem('modelLinker.huggingFaceToken');
+                if (civitaiInput) civitaiInput.value = '';
+                if (hfInput) hfInput.value = '';
+                if (status) status.textContent = 'Tokens cleared.';
+                this.showNotification('API tokens cleared', 'info');
+            });
+        }
+    }
+
     switchTab(tab) {
         this.activeTab = tab;
         
         if (tab === 'missing') {
             this.missingTab.classList.add('ml-tab-active');
             this.loadedTab.classList.remove('ml-tab-active');
+            this.optionsTab.classList.remove('ml-tab-active');
             this.downloadAllButton.style.display = 'inline-flex';
             this.autoResolveButton.style.display = 'inline-flex';
             this.applyPendingBtn.style.display = 'inline-flex';
@@ -2084,9 +2226,10 @@ class LinkerManagerDialog extends ComfyDialog {
                 this.splitterElement.style.display = '';
             }
             this.loadWorkflowData();
-        } else {
+        } else if (tab === 'loaded') {
             this.missingTab.classList.remove('ml-tab-active');
             this.loadedTab.classList.add('ml-tab-active');
+            this.optionsTab.classList.remove('ml-tab-active');
             this.downloadAllButton.style.display = 'none';
             this.autoResolveButton.style.display = 'none';
             this.applyPendingBtn.style.display = 'none';
@@ -2098,6 +2241,20 @@ class LinkerManagerDialog extends ComfyDialog {
                 this.splitterElement.style.display = 'none';
             }
             this.loadLoadedModels();
+        } else {
+            this.missingTab.classList.remove('ml-tab-active');
+            this.loadedTab.classList.remove('ml-tab-active');
+            this.optionsTab.classList.add('ml-tab-active');
+            this.downloadAllButton.style.display = 'none';
+            this.autoResolveButton.style.display = 'none';
+            this.applyPendingBtn.style.display = 'none';
+            if (this.queueElement) {
+                this.queueElement.style.display = 'none';
+            }
+            if (this.splitterElement) {
+                this.splitterElement.style.display = 'none';
+            }
+            this.displayOptions();
         }
     }
 
@@ -4069,6 +4226,7 @@ class LinkerManagerDialog extends ComfyDialog {
         const progressId = `download-progress-${missing.node_id}-${missing.widget_index}`;
         const progressDiv = this.contentElement?.querySelector(`#${progressId}`);
         const downloadBtn = this.contentElement?.querySelector(`#download-${missing.node_id}-${missing.widget_index}`);
+        const tokens = this.getStoredTokens();
 
         try {
             // Disable button and show progress with cancel button immediately
@@ -4103,7 +4261,9 @@ class LinkerManagerDialog extends ComfyDialog {
                 body: JSON.stringify({
                     url: source.url,
                     filename: filename,
-                    category: category
+                    category: category,
+                    hf_token: tokens.hf_token,
+                    civitai_key: tokens.civitai_key
                 })
             });
 
@@ -4609,6 +4769,7 @@ class LinkerManagerDialog extends ComfyDialog {
     async downloadFromSearch(missing, url, filename, category, btn) {
         const progressId = `download-progress-${missing.node_id}-${missing.widget_index}`;
         const progressDiv = this.contentElement?.querySelector(`#${progressId}`);
+        const tokens = this.getStoredTokens();
 
         try {
             btn.disabled = true;
@@ -4637,7 +4798,13 @@ class LinkerManagerDialog extends ComfyDialog {
             const response = await api.fetchApi('/model_linker/download', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url, filename, category })
+                body: JSON.stringify({
+                    url,
+                    filename,
+                    category,
+                    hf_token: tokens.hf_token,
+                    civitai_key: tokens.civitai_key
+                })
             });
 
             if (!response.ok) {
