@@ -737,7 +737,9 @@ class ModelLinkerExtension:
                                 search_civitai_for_file,
                             )
 
-                            result = search_civitai_for_file(filename)
+                            result = search_civitai_for_file(
+                                filename, model_type=category
+                            )
                             if result and result.get("url"):
                                 return web.json_response(
                                     {
@@ -996,7 +998,9 @@ class ModelLinkerExtension:
                                         }
                                         results["found"] = True
                             else:
-                                civitai_result = search_civitai_for_file(filename)
+                                civitai_result = search_civitai_for_file(
+                                    filename, model_type=category
+                                )
                                 log_search_result("civitai", civitai_result)
                                 if civitai_result:
                                     results["civitai"] = civitai_result

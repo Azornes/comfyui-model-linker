@@ -12,6 +12,7 @@ import requests
 from typing import Dict, Any, Optional, List
 from urllib.parse import urlparse, parse_qs, quote
 
+from ..matcher import calculate_similarity_with_normalization, normalize_filename
 from ..log_system.log_funcs import (
     log_debug,
     log_info,
@@ -26,6 +27,444 @@ CIVITAI_API_URL = "https://civitai.com/api/v1"
 _search_cache: Dict[str, Any] = {}
 _urn_cache: Dict[tuple[int, int], Dict[str, Any]] = {}
 _hash_cache: Dict[str, Dict[str, Any]] = {}
+
+CIVITAI_TYPE_MAP = {
+    "checkpoint": "Checkpoint",
+    "checkpoints": "Checkpoint",
+    "lora": "LORA",
+    "loras": "LORA",
+    "vae": "VAE",
+    "controlnet": "Controlnet",
+    "embedding": "TextualInversion",
+    "embeddings": "TextualInversion",
+    "upscaler": "Upscaler",
+    "upscale_models": "Upscaler",
+}
+
+
+def _build_civitai_result_from_version(
+    model_id: int,
+    model_name: str,
+    model_type: str,
+    version: Dict[str, Any],
+    file_info: Dict[str, Any],
+    tags: Optional[List[str]] = None,
+    match_type: str = "exact",
+) -> Dict[str, Any]:
+    """Normalize CivitAI model/version/file data into the search result format."""
+    version_id = version.get("id")
+    return {
+        "source": "civitai",
+        "model_id": model_id,
+        "version_id": version_id,
+        "name": model_name,
+        "type": model_type,
+        "filename": file_info.get("name", ""),
+        "url": f"https://civitai.com/models/{model_id}?modelVersionId={version_id}",
+        "download_url": file_info.get("downloadUrl")
+        or get_civitai_download_url(version_id),
+        "size": file_info.get("sizeKB", 0) * 1024,
+        "base_model": version.get("baseModel"),
+        "tags": tags or [],
+        "match_type": match_type,
+    }
+
+
+def _calculate_filename_confidence(target_filename: str, candidate_filename: str) -> float:
+    """Calculate filename confidence using the same normalized approach as local matching."""
+    target_norm = normalize_filename(target_filename)
+    candidate_norm = normalize_filename(candidate_filename)
+
+    if target_norm == candidate_norm:
+        return 100.0
+
+    similarity = calculate_similarity_with_normalization(
+        target_filename, candidate_filename
+    )
+    similarity_no_ext = calculate_similarity_with_normalization(
+        os.path.splitext(target_filename)[0], os.path.splitext(candidate_filename)[0]
+    )
+    return round(max(similarity, similarity_no_ext) * 100, 1)
+
+
+def _find_matching_file_in_versions(
+    versions: List[Dict[str, Any]],
+    filename: str,
+    exact_only: bool = False,
+) -> Optional[Dict[str, Any]]:
+    """Search all versions/files for an exact or partial filename match."""
+    filename_lower = filename.lower()
+    filename_base = os.path.splitext(filename_lower)[0]
+    best_match = None
+    best_confidence = 0.0
+
+    for version in versions:
+        version_id = version.get("id")
+        files = version.get("files", [])
+        log_debug(
+            f"CivitAI checking version_id={version_id} with {len(files)} files"
+        )
+
+        for file_info in files:
+            file_name = file_info.get("name", "")
+            if not file_name:
+                continue
+
+            file_name_lower = file_name.lower()
+            file_base = os.path.splitext(file_name_lower)[0]
+
+            if file_name_lower == filename_lower:
+                return {"version": version, "file_info": file_info, "match_type": "exact"}
+
+            if not exact_only and (
+                filename_base in file_base or file_base in filename_base
+            ):
+                return {
+                    "version": version,
+                    "file_info": file_info,
+                    "match_type": "partial",
+                }
+
+            if not exact_only:
+                confidence = _calculate_filename_confidence(filename, file_name)
+                if confidence > best_confidence:
+                    best_confidence = confidence
+                    best_match = {
+                        "version": version,
+                        "file_info": file_info,
+                        "match_type": "similar",
+                        "confidence": confidence,
+                    }
+
+    if best_match and best_confidence >= 50.0:
+        return best_match
+
+    return None
+
+
+def _extract_civitai_red_candidates(html: str, limit: int = 5) -> List[Dict[str, int]]:
+    """Extract model/version candidates from civitai.red search results HTML."""
+    candidates: List[Dict[str, int]] = []
+    seen = set()
+
+    for match in re.finditer(r"/models/(\d+)(?:\?modelVersionId=(\d+))?", html):
+        model_id = int(match.group(1))
+        version_id = int(match.group(2)) if match.group(2) else None
+        key = (model_id, version_id)
+        if key in seen:
+            continue
+        seen.add(key)
+        candidates.append({"model_id": model_id, "version_id": version_id})
+        if len(candidates) >= limit:
+            break
+
+    return candidates
+
+
+def _extract_trpc_model_candidates(
+    payload: Any, limit: int = 5
+) -> List[Dict[str, Optional[int]]]:
+    """Extract model/version candidates from a tRPC JSON response."""
+    candidates: List[Dict[str, Optional[int]]] = []
+    seen = set()
+
+    items = (
+        payload.get("result", {})
+        .get("data", {})
+        .get("json", {})
+        .get("items", [])
+    )
+
+    if not isinstance(items, list):
+        return candidates
+
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+
+        model_id = item.get("id")
+        version = item.get("version", {})
+        version_id = version.get("id") if isinstance(version, dict) else None
+
+        if not isinstance(model_id, int):
+            continue
+
+        key = (model_id, version_id if isinstance(version_id, int) else None)
+        if key in seen:
+            continue
+
+        seen.add(key)
+        candidates.append(
+            {
+                "model_id": model_id,
+                "version_id": version_id if isinstance(version_id, int) else None,
+            }
+        )
+
+        if len(candidates) >= limit:
+            break
+
+    return candidates
+
+
+def _search_civitai_trpc_candidates(
+    filename: str,
+    model_type: Optional[str] = None,
+    timeout: int = 15,
+    limit: int = 5,
+) -> List[Dict[str, Optional[int]]]:
+    """Try CivitAI.red tRPC search endpoint and log the raw outcome for diagnostics."""
+    input_payload = {
+        "json": {
+            "period": "Month",
+            "periodMode": "stats",
+            "sort": "Highest Rated",
+            "query": filename,
+            "pending": False,
+            "browsingLevel": 28,
+            "excludedTagIds": [
+                415792,
+                426772,
+                5351,
+                5161,
+                5162,
+                5188,
+                5249,
+                306619,
+                5351,
+                154326,
+                161829,
+                163032,
+                130818,
+                130820,
+                133182,
+            ],
+            "disablePoi": True,
+            "disableMinor": True,
+            "limit": limit,
+            "authed": True,
+        },
+        "meta": {"values": {"cursor": ["undefined"]}},
+    }
+    civitai_type = CIVITAI_TYPE_MAP.get(str(model_type).lower()) if model_type else None
+    if civitai_type:
+        input_payload["json"]["types"] = [civitai_type]
+
+    url = (
+        "https://civitai.red/api/trpc/model.getAll?input="
+        + quote(json.dumps(input_payload, separators=(",", ":")))
+    )
+    headers = {
+        "accept": "application/json",
+        "content-type": "application/json",
+        "referer": f"https://civitai.red/models?query={quote(filename)}",
+        "user-agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/147.0.0.0 Safari/537.36"
+        ),
+        "x-client": "web",
+        "x-client-version": "5.0.1657",
+    }
+
+    log_info(
+        f"CivitAI tRPC search start: filename={filename}, model_type={model_type}, url={url}"
+    )
+
+    try:
+        response = requests.get(url, headers=headers, timeout=timeout)
+    except Exception as e:
+        log_warn(f"CivitAI tRPC request failed for filename={filename}: {e}")
+        return []
+
+    text_preview = response.text[:800].replace("\n", " ").replace("\r", " ")
+    log_info(
+        f"CivitAI tRPC response: status={response.status_code}, content_type={response.headers.get('content-type')}, text_preview={text_preview}"
+    )
+
+    if response.status_code != 200:
+        return []
+
+    try:
+        payload = response.json()
+    except Exception as e:
+        log_warn(f"CivitAI tRPC JSON parse failed for filename={filename}: {e}")
+        return []
+
+    candidates = _extract_trpc_model_candidates(payload, limit=limit)
+    log_info(
+        f"CivitAI tRPC extracted {len(candidates)} candidates for filename={filename}: {candidates}"
+    )
+    return candidates
+
+
+def _search_civitai_red_candidates(
+    filename: str, timeout: int = 15, limit: int = 5
+) -> List[Dict[str, int]]:
+    """Search civitai.red by full filename and return model/version candidates."""
+    search_url = f"https://civitai.red/models?query={quote(filename)}"
+    log_info(f"CivitAI.red search start: filename={filename}, url={search_url}")
+
+    response = requests.get(search_url, timeout=timeout)
+    if response.status_code != 200:
+        log_warn(
+            f"CivitAI.red search returned {response.status_code} for filename={filename}"
+        )
+        return []
+
+    candidates = _extract_civitai_red_candidates(response.text, limit=limit)
+    log_info(
+        f"CivitAI.red search extracted {len(candidates)} candidates for filename={filename}"
+    )
+    return candidates
+
+
+def _find_civitai_file_in_model(
+    model_id: int,
+    filename: str,
+    api_key: Optional[str] = None,
+    exact_only: bool = False,
+    preferred_version_id: Optional[int] = None,
+) -> Optional[Dict[str, Any]]:
+    """Load one CivitAI model and search all its versions for the requested file."""
+    filename_lower = filename.lower()
+    filename_base = os.path.splitext(filename_lower)[0]
+
+    def build_result_from_resolved_version(
+        resolved: Dict[str, Any], version_id: int
+    ) -> Dict[str, Any]:
+        expected_filename = resolved.get("expected_filename", "")
+        primary_file = None
+        for file_info in resolved.get("files", []):
+            if file_info.get("name") == expected_filename:
+                primary_file = file_info
+                break
+        if primary_file is None:
+            primary_file = (resolved.get("files") or [{}])[0]
+
+        return {
+            "source": "civitai",
+            "model_id": model_id,
+            "version_id": version_id,
+            "name": resolved.get("model_name", ""),
+            "type": "",
+            "filename": expected_filename,
+            "url": f"https://civitai.com/models/{model_id}?modelVersionId={version_id}",
+            "download_url": get_civitai_download_url(version_id, api_key),
+            "size": primary_file.get("size"),
+            "base_model": resolved.get("base_model"),
+            "tags": resolved.get("tags", []),
+            "match_type": "exact",
+            "confidence": _calculate_filename_confidence(
+                filename, expected_filename
+            ),
+        }
+
+    def resolved_version_matches(resolved: Dict[str, Any]) -> bool:
+        expected_filename = str(resolved.get("expected_filename", "")).lower()
+        expected_base = os.path.splitext(expected_filename)[0]
+        log_debug(
+            f"CivitAI resolved version filename check: expected_filename={resolved.get('expected_filename')}, target_filename={filename}"
+        )
+        if expected_filename == filename_lower:
+            return True
+        if not exact_only and (
+            filename_base in expected_base or expected_base in filename_base
+        ):
+            return True
+        return False
+
+    if preferred_version_id is not None:
+        resolved = resolve_urn(model_id, preferred_version_id, api_key)
+        if resolved:
+            if resolved_version_matches(resolved):
+                return build_result_from_resolved_version(resolved, preferred_version_id)
+
+    best_resolved_result = None
+    best_resolved_confidence = 0.0
+
+    headers = {}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    response = requests.get(
+        f"{CIVITAI_API_URL}/models/{model_id}", headers=headers, timeout=15
+    )
+    if response.status_code != 200:
+        log_warn(f"CivitAI model lookup returned {response.status_code} for model_id={model_id}")
+        return None
+
+    data = response.json()
+    versions = data.get("modelVersions", [])
+    if preferred_version_id is not None:
+        preferred = [v for v in versions if v.get("id") == preferred_version_id]
+        others = [v for v in versions if v.get("id") != preferred_version_id]
+        versions = preferred + others
+
+    log_debug(
+        f"CivitAI model lookup model_id={model_id} returned {len(versions)} versions"
+    )
+
+    for version in versions:
+        version_id = version.get("id")
+        if not version_id:
+            continue
+
+        resolved = resolve_urn(model_id, version_id, api_key)
+        if resolved:
+            if resolved_version_matches(resolved):
+                return build_result_from_resolved_version(resolved, version_id)
+
+            if not exact_only:
+                expected_filename = resolved.get("expected_filename", "")
+                confidence = _calculate_filename_confidence(filename, expected_filename)
+                log_debug(
+                    f"CivitAI resolved version confidence: model_id={model_id}, version_id={version_id}, expected_filename={expected_filename}, confidence={confidence}"
+                )
+                if confidence > best_resolved_confidence:
+                    best_resolved_confidence = confidence
+                    best_resolved_result = build_result_from_resolved_version(
+                        resolved, version_id
+                    )
+                    best_resolved_result["match_type"] = "similar"
+                    best_resolved_result["confidence"] = confidence
+
+        files = version.get("files", [])
+        file_names = [f.get("name", "") for f in files if isinstance(f, dict)]
+        log_debug(
+            f"CivitAI version file names: model_id={model_id}, version_id={version_id}, files={file_names}"
+        )
+
+    if best_resolved_result and best_resolved_confidence >= 50.0:
+        log_info(
+            f"CivitAI best probable match: model_id={model_id}, version_id={best_resolved_result.get('version_id')}, filename={best_resolved_result.get('filename')}, confidence={best_resolved_confidence}"
+        )
+        return best_resolved_result
+
+    match = _find_matching_file_in_versions(versions, filename, exact_only=exact_only)
+    if match:
+        version = match["version"]
+        file_info = match["file_info"]
+        result = _build_civitai_result_from_version(
+            model_id=model_id,
+            model_name=data.get("name", ""),
+            model_type=data.get("type", ""),
+            version=version,
+            file_info=file_info,
+            tags=data.get("tags", []),
+            match_type=match["match_type"],
+        )
+        result["confidence"] = match.get(
+            "confidence",
+            _calculate_filename_confidence(filename, result.get("filename", "")),
+        )
+        if match["match_type"] == "similar":
+            log_info(
+                f"CivitAI version-list probable match: model_id={model_id}, version_id={result.get('version_id')}, filename={result.get('filename')}, confidence={result['confidence']}"
+            )
+        return result
+
+    return None
 
 
 def _extract_civitai_image_id(image_url: str) -> Optional[str]:
@@ -95,26 +534,11 @@ def get_civitai_download_url(version_id: int, api_key: Optional[str] = None) -> 
     return url
 
 
-def clean_filename_for_search(filename: str) -> str:
-    """
-    Clean up filename for better CivitAI search results.
-    Remove common suffixes that might prevent matches.
-    """
-    base = os.path.splitext(filename)[0]
-    # Remove common precision/format suffixes
-    base = re.sub(
-        r"[-_]?(fp16|fp32|fp8|bf16|e4m3fn|scaled|pruned|emaonly|q4|q8).*$",
-        "",
-        base,
-        flags=re.IGNORECASE,
-    )
-    # Remove version numbers at end
-    base = re.sub(r"[-_]?v?\d+(\.\d+)*$", "", base, flags=re.IGNORECASE)
-    return base
-
-
 def search_civitai_for_file(
-    filename: str, api_key: Optional[str] = None, exact_only: bool = False
+    filename: str,
+    api_key: Optional[str] = None,
+    exact_only: bool = False,
+    model_type: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     """
     Search CivitAI for a specific model file.
@@ -137,106 +561,57 @@ def search_civitai_for_file(
         return _search_cache[cache_key]
 
     try:
-        # Clean filename for search
-        search_term = clean_filename_for_search(filename)
-
-        headers = {}
-        if api_key:
-            headers["Authorization"] = f"Bearer {api_key}"
-
-        search_url = f"{CIVITAI_API_URL}/models?query={quote(search_term)}&limit=10"
-        log_info(
-            f"CivitAI search start: filename={filename}, query={search_term}, exact_only={exact_only}"
+        # Prefer the CivitAI.red tRPC search because it is much closer to what
+        # the browser search UI returns than the broad public /models API.
+        trpc_candidates = _search_civitai_trpc_candidates(
+            filename, model_type=model_type
         )
-
-        response = requests.get(search_url, headers=headers, timeout=15)
-        if response.status_code != 200:
-            log_warn(
-                f"CivitAI search returned {response.status_code} for query={search_term}"
+        for candidate in trpc_candidates:
+            model_id = candidate["model_id"]
+            version_id = candidate.get("version_id")
+            log_info(
+                f"CivitAI tRPC candidate check: model_id={model_id}, preferred_version_id={version_id}, filename={filename}"
             )
-            return None
-
-        data = response.json()
-        items = data.get("items", [])
-        log_info(
-            f"CivitAI search API returned {len(items)} models for query={search_term}"
-        )
-
-        filename_base = os.path.splitext(filename.lower())[0]
-
-        for item in items:
-            model_id = item.get("id")
-            model_name = item.get("name", "")
-            model_type = item.get("type", "")
-            log_debug(
-                f"CivitAI checking model_id={model_id}, model_name={model_name}, model_type={model_type}"
+            result = _find_civitai_file_in_model(
+                model_id=model_id,
+                filename=filename,
+                api_key=api_key,
+                exact_only=exact_only,
+                preferred_version_id=version_id,
             )
-
-            model_versions = item.get("modelVersions", [])
-            for version in model_versions:
-                version_id = version.get("id")
-                files = version.get("files", [])
-                log_debug(
-                    f"CivitAI checking version_id={version_id} with {len(files)} files for model_id={model_id}"
+            if result:
+                _search_cache[cache_key] = result
+                log_info(
+                    f"Found {filename} via CivitAI tRPC fallback: model_id={result.get('model_id')}, version_id={result.get('version_id')}"
                 )
+                return result
 
-                for file_info in files:
-                    file_name = file_info.get("name", "")
-                    file_base = os.path.splitext(file_name.lower())[0]
-
-                    # Check for exact filename match (case-insensitive) - always try this
-                    if file_name.lower() == filename.lower():
-                        download_url = file_info.get("downloadUrl", "")
-                        if download_url:
-                            result = {
-                                "source": "civitai",
-                                "model_id": model_id,
-                                "version_id": version_id,
-                                "name": model_name,
-                                "type": model_type,
-                                "filename": file_name,
-                                "url": f"https://civitai.com/models/{model_id}",
-                                "download_url": download_url,
-                                "size": file_info.get("sizeKB", 0) * 1024,
-                                "base_model": version.get("baseModel"),
-                                "tags": item.get("tags", []),
-                                "match_type": "exact",
-                            }
-                            _search_cache[cache_key] = result
-                            log_info(f"Found {filename} on CivitAI: {model_name}")
-                            return result
-
-                    # Check for partial match (filename_base in file_base or vice versa)
-                    # Skip partial matches if exact_only is True - prevents confusing
-                    # users with wrong model suggestions for downloads
-                    if not exact_only:
-                        if filename_base in file_base or file_base in filename_base:
-                            download_url = file_info.get("downloadUrl", "")
-                            if download_url:
-                                result = {
-                                    "source": "civitai",
-                                    "model_id": model_id,
-                                    "version_id": version_id,
-                                    "name": model_name,
-                                    "type": model_type,
-                                    "filename": file_name,
-                                    "url": f"https://civitai.com/models/{model_id}",
-                                    "download_url": download_url,
-                                    "size": file_info.get("sizeKB", 0) * 1024,
-                                    "base_model": version.get("baseModel"),
-                                    "tags": item.get("tags", []),
-                                    "match_type": "partial",
-                                }
-                                _search_cache[cache_key] = result
-                                log_info(
-                                    f"Found similar file for {filename} on CivitAI: {model_name}"
-                                )
-                                return result
+        # Fallback: civitai.red HTML search, then inspect all submodels/versions
+        candidates = _search_civitai_red_candidates(filename)
+        for candidate in candidates:
+            model_id = candidate["model_id"]
+            version_id = candidate.get("version_id")
+            log_info(
+                f"CivitAI.red candidate check: model_id={model_id}, preferred_version_id={version_id}, filename={filename}"
+            )
+            result = _find_civitai_file_in_model(
+                model_id=model_id,
+                filename=filename,
+                api_key=api_key,
+                exact_only=exact_only,
+                preferred_version_id=version_id,
+            )
+            if result:
+                _search_cache[cache_key] = result
+                log_info(
+                    f"Found {filename} via CivitAI.red fallback: model_id={result.get('model_id')}, version_id={result.get('version_id')}"
+                )
+                return result
 
         # Not found
         _search_cache[cache_key] = None
         log_info(
-            f"CivitAI search no result: filename={filename}, query={search_term}, models_checked={len(items)}"
+            f"CivitAI search no result: filename={filename}, trpc_candidates={len(trpc_candidates)}, html_candidates={len(candidates) if 'candidates' in locals() else 0}"
         )
         return None
 

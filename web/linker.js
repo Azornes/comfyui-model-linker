@@ -224,6 +224,9 @@ class LinkerManagerDialog extends ComfyDialog {
         const sourceLabel = isFromWorkflow ? 'Workflow' : (sourceLabels[downloadSource.source] || 'Online');
         const downloadFilename = downloadSource.filename || filename;
         const formattedDownloadName = this.formatFilename(downloadFilename, 45);
+        const confidenceDisplay = typeof downloadSource.confidence === 'number'
+            ? `${Math.round(downloadSource.confidence)}% match`
+            : '';
 
         let sizeDisplay = '';
         if (downloadSource.size) {
@@ -245,10 +248,13 @@ class LinkerManagerDialog extends ComfyDialog {
         html += `</div>`;
         html += `<div class="ml-download-info">`;
         html += `<span class="ml-download-source">${isFromWorkflow ? 'URL from workflow' : sourceLabel}</span>`;
+        if (confidenceDisplay) {
+            html += ` <span class="ml-chip">${confidenceDisplay}</span>`;
+        }
         if (modelCardUrl) {
-            html += `<br><a href="${modelCardUrl}" target="_blank" rel="noopener noreferrer" class="ml-link" title="Open model card">${formattedDownloadName.display}</a>`;
+            html += `<br><a href="${modelCardUrl}" target="_blank" rel="noopener noreferrer" class="ml-link" title="Open model card">${formattedDownloadName.display}</a>${sizeDisplay ? ` <span class="ml-download-filesize">(${sizeDisplay})</span>` : ''}`;
         } else {
-            html += `<br><span title="${formattedDownloadName.full}">${formattedDownloadName.display}</span>`;
+            html += `<br><span title="${formattedDownloadName.full}">${formattedDownloadName.display}</span>${sizeDisplay ? ` <span class="ml-download-filesize">(${sizeDisplay})</span>` : ''}`;
         }
         html += `</div>`;
         html += this.renderDownloadTargetControls(missing, downloadSource.directory || downloadSource.category || 'checkpoints');
@@ -6061,12 +6067,29 @@ class LinkerManagerDialog extends ComfyDialog {
             const downloadFilename = missing.civitai_info?.expected_filename || civitaiResult.filename || civitaiResult.name;
             // Build display name with version if available
             const modelName = missing.civitai_info?.version_name ? `${missing.civitai_info.model_name} v${missing.civitai_info.version_name}` : (civitaiResult.name || 'Model');
+            const confidenceDisplay = typeof civitaiResult.confidence === 'number'
+                ? `${Math.round(civitaiResult.confidence)}% match`
+                : '';
+            const sizeDisplay = civitaiResult.size
+                ? (typeof civitaiResult.size === 'number'
+                    ? this.formatBytes(civitaiResult.size)
+                    : civitaiResult.size)
+                : '';
             html += `<div class="ml-status ml-status-warning" style="flex-direction: column; align-items: flex-start;">`;
             html += `<strong>Found on CivitAI</strong>`;
             html += `<div style="margin-top: 4px; font-size: 12px;">`;
             // Model name as clickable button/link
             html += `<button class="ml-btn ml-btn-sm" style="background: transparent; color: #FF9800; border: 1px solid #FF9800; font-weight: bold; cursor: pointer;" onclick="window.open('${modelUrl}', '_blank')">${modelName}</button> `;
             html += `<span style="color: var(--ml-text-muted);">${civitaiResult.type || ''}</span>`;
+            html += `</div>`;
+            html += `<div style="margin-top: 4px; font-size: 12px;">`;
+            html += `<span class="ml-chip">${downloadFilename}</span>`;
+            if (confidenceDisplay) {
+                html += ` <span class="ml-chip">${confidenceDisplay}</span>`;
+            }
+            if (sizeDisplay) {
+                html += ` <span class="ml-download-size">[${sizeDisplay}]</span>`;
+            }
             html += `</div>`;
             html += `<div style="margin-top: 8px; display: flex; gap: 8px;">`;
             // Download button - use expected_filename from URN resolution
