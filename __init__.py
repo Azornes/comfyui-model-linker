@@ -766,6 +766,37 @@ class ModelLinkerExtension:
                 async def search_sources(request):
                     """Search for model download sources."""
                     try:
+                        def summarize_result(source_name, result, extra=None):
+                            if isinstance(result, dict):
+                                summary = {
+                                    "source": source_name,
+                                    "name": result.get("name"),
+                                    "filename": result.get("filename"),
+                                    "match_type": result.get("match_type"),
+                                    "repo_id": result.get("repo_id"),
+                                    "model_id": result.get("model_id"),
+                                    "version_id": result.get("version_id"),
+                                    "url": result.get("url"),
+                                    "download_url": result.get("download_url"),
+                                    "size": result.get("size"),
+                                }
+                            else:
+                                summary = {"source": source_name, "result": result}
+
+                            if extra:
+                                summary.update(extra)
+
+                            return summary
+
+                        def log_search_result(source_name, result, extra=None):
+                            details = summarize_result(source_name, result, extra)
+                            if result and (
+                                not isinstance(result, list) or len(result) > 0
+                            ):
+                                log_info(f"Search source [{source_name}] FOUND: {details}")
+                            else:
+                                log_info(f"Search source [{source_name}] no result: {details}")
+
                         data = await request.json()
                         filename = data.get("filename", "")
                         category = data.get("category", "")
@@ -809,8 +840,7 @@ class ModelLinkerExtension:
                         search_huggingface_source = "huggingface" in normalized_sources
                         search_civitai_source = "civitai" in normalized_sources
 
-                        # Debug logging
-                        self.logger.info(
+                        log_info(
                             f"Search request: filename={filename}, category={category}, is_urn={is_urn}, model_id={data.get('model_id')}, version_id={data.get('version_id')}, sources={sorted(normalized_sources)}"
                         )
 
@@ -825,7 +855,11 @@ class ModelLinkerExtension:
 
                         # 1. Search local databases (curated + model-list)
                         if search_local:
+                            log_info(
+                                f"Search source [local] start: filename={filename}, category={category}"
+                            )
                             popular_info = get_popular_model_url(filename)
+                            log_search_result("popular", popular_info)
                             if popular_info:
                                 results["popular"] = {
                                     "source": "popular",
@@ -835,6 +869,15 @@ class ModelLinkerExtension:
                                 results["found"] = True
 
                             model_list_result = search_model_list(filename)
+                            log_search_result(
+                                "model_list",
+                                model_list_result,
+                                {
+                                    "confidence": model_list_result.get("confidence")
+                                    if model_list_result
+                                    else None
+                                },
+                            )
                             if model_list_result:
                                 confidence = model_list_result.get("confidence", 0)
                                 if is_urn and confidence >= 70:
@@ -846,13 +889,18 @@ class ModelLinkerExtension:
 
                         # 2. Search HuggingFace for exact file match
                         if search_huggingface_source:
+                            log_info(f"Search source [huggingface] start: filename={filename}")
                             hf_result = search_huggingface_for_file(filename)
+                            log_search_result("huggingface", hf_result)
                             if hf_result:
                                 results["huggingface"] = hf_result
                                 results["found"] = True
 
                         # 3. Search CivitAI - use direct download for URNs
                         if search_civitai_source:
+                            log_info(
+                                f"Search source [civitai] start: filename={filename}, category={category}, is_urn={is_urn}"
+                            )
                             # For URNs, use direct model_id/version_id to get download URL
                             if is_urn:
                                 # Get model_id and version_id from request data
@@ -897,14 +945,39 @@ class ModelLinkerExtension:
                                             "base_model": model_info.get("base_model"),
                                             "tags": model_info.get("tags", []),
                                         }
+                                        log_search_result(
+                                            "civitai/urn",
+                                            results["civitai"],
+                                            {
+                                                "files_count": len(
+                                                    model_info.get("files", [])
+                                                )
+                                            },
+                                        )
                                         results["found"] = True
+                                    else:
+                                        log_search_result(
+                                            "civitai/urn",
+                                            None,
+                                            {
+                                                "model_id": model_id,
+                                                "version_id": version_id,
+                                            },
+                                        )
                                 elif category:
                                     # Fallback to search if no IDs
-                                    self.logger.info(
+                                    log_info(
                                         f"URN: No model_id/version_id, falling back to CivitAI search"
                                     )
                                     civitai_results = search_civitai(
                                         filename, model_type=category
+                                    )
+                                    log_search_result(
+                                        "civitai/fallback",
+                                        civitai_results[0] if civitai_results else None,
+                                        {
+                                            "results_count": len(civitai_results),
+                                        },
                                     )
                                     if civitai_results:
                                         first_result = civitai_results[0]
@@ -924,16 +997,18 @@ class ModelLinkerExtension:
                                         results["found"] = True
                             else:
                                 civitai_result = search_civitai_for_file(filename)
+                                log_search_result("civitai", civitai_result)
                                 if civitai_result:
                                     results["civitai"] = civitai_result
                                     results["found"] = True
 
+                        log_info(
+                            f"Search summary: found={results['found']}, searched_sources={results['searched_sources']}"
+                        )
                         return web.json_response(results)
 
                     except Exception as e:
-                        self.logger.error(
-                            f"Model Linker search error: {e}", exc_info=True
-                        )
+                        log_exception(f"Model Linker search error: {e}")
                         return web.json_response({"error": str(e)}, status=500)
 
                 @routes.post("/model_linker/download")

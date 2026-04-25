@@ -98,6 +98,7 @@ def search_huggingface_for_file(
 
     cache_key = f"hf_{filename}_exact{exact_only}"
     if cache_key in _search_cache:
+        log_debug(f"HuggingFace search cache hit for {filename} (exact_only={exact_only})")
         return _search_cache[cache_key]
 
     try:
@@ -110,18 +111,28 @@ def search_huggingface_for_file(
 
         # Search for repos containing this filename
         search_url = f"{HF_API_URL}/models?search={quote(filename_base)}&limit=10"
+        log_info(
+            f"HuggingFace search start: filename={filename}, query={filename_base}, exact_only={exact_only}"
+        )
 
         response = requests.get(search_url, headers=headers, timeout=10)
         if response.status_code != 200:
-            log_debug(f"HuggingFace search returned {response.status_code}")
+            log_warn(
+                f"HuggingFace search returned {response.status_code} for query={filename_base}"
+            )
             return None
 
         repos = response.json()
+        log_info(
+            f"HuggingFace search API returned {len(repos)} repos for query={filename_base}"
+        )
 
         for repo in repos:
             repo_id = repo.get("id", "")
             if not repo_id:
                 continue
+
+            log_debug(f"HuggingFace checking repo {repo_id} for filename={filename}")
 
             # Check if this repo actually has a matching file
             files_url = f"{HF_API_URL}/models/{repo_id}/tree/main"
@@ -130,6 +141,9 @@ def search_huggingface_for_file(
                 files_response = requests.get(files_url, headers=headers, timeout=10)
                 if files_response.status_code == 200:
                     files = files_response.json()
+                    log_debug(
+                        f"HuggingFace repo {repo_id} returned {len(files)} tree items"
+                    )
 
                     for file_info in files:
                         file_path = file_info.get("path", "")
@@ -178,15 +192,18 @@ def search_huggingface_for_file(
                                     return result
 
             except Exception as e:
-                log_debug(f"Error checking repo {repo_id}: {e}")
+                log_debug(f"Error checking HuggingFace repo {repo_id}: {e}")
                 continue
 
         # Not found
         _search_cache[cache_key] = None
+        log_info(
+            f"HuggingFace search no result: filename={filename}, query={filename_base}, repos_checked={len(repos)}"
+        )
         return None
 
     except Exception as e:
-        log_error(f"HuggingFace search error: {e}")
+        log_exception(f"HuggingFace search error for {filename}: {e}")
         return None
 
 

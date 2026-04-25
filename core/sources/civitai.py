@@ -133,6 +133,7 @@ def search_civitai_for_file(
 
     cache_key = f"civit_{filename}_exact{exact_only}"
     if cache_key in _search_cache:
+        log_debug(f"CivitAI search cache hit for {filename} (exact_only={exact_only})")
         return _search_cache[cache_key]
 
     try:
@@ -144,14 +145,22 @@ def search_civitai_for_file(
             headers["Authorization"] = f"Bearer {api_key}"
 
         search_url = f"{CIVITAI_API_URL}/models?query={quote(search_term)}&limit=10"
+        log_info(
+            f"CivitAI search start: filename={filename}, query={search_term}, exact_only={exact_only}"
+        )
 
         response = requests.get(search_url, headers=headers, timeout=15)
         if response.status_code != 200:
-            log_debug(f"CivitAI search returned {response.status_code}")
+            log_warn(
+                f"CivitAI search returned {response.status_code} for query={search_term}"
+            )
             return None
 
         data = response.json()
         items = data.get("items", [])
+        log_info(
+            f"CivitAI search API returned {len(items)} models for query={search_term}"
+        )
 
         filename_base = os.path.splitext(filename.lower())[0]
 
@@ -159,11 +168,17 @@ def search_civitai_for_file(
             model_id = item.get("id")
             model_name = item.get("name", "")
             model_type = item.get("type", "")
+            log_debug(
+                f"CivitAI checking model_id={model_id}, model_name={model_name}, model_type={model_type}"
+            )
 
             model_versions = item.get("modelVersions", [])
             for version in model_versions:
                 version_id = version.get("id")
                 files = version.get("files", [])
+                log_debug(
+                    f"CivitAI checking version_id={version_id} with {len(files)} files for model_id={model_id}"
+                )
 
                 for file_info in files:
                     file_name = file_info.get("name", "")
@@ -220,10 +235,13 @@ def search_civitai_for_file(
 
         # Not found
         _search_cache[cache_key] = None
+        log_info(
+            f"CivitAI search no result: filename={filename}, query={search_term}, models_checked={len(items)}"
+        )
         return None
 
     except Exception as e:
-        log_error(f"CivitAI search error: {e}")
+        log_exception(f"CivitAI search error for {filename}: {e}")
         return None
 
 
