@@ -1306,7 +1306,7 @@ class LinkerManagerDialog extends ComfyDialog {
             .ml-card {
                 background: var(--ml-card-bg);
                 border: 1px solid transparent;
-                border-radius: var(--ml-radius-lg);
+                border-radius: 0;
                 padding: 10px 12px;
                 margin-bottom: 4px;
                 transition: transform 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
@@ -1465,7 +1465,7 @@ class LinkerManagerDialog extends ComfyDialog {
                 min-width: 0;
                 background: var(--ml-panel-bg);
                 border: 1px solid transparent;
-                border-radius: var(--ml-radius-md);
+                border-radius: 0;
                 padding: 10px;
                 box-shadow: inset 0 0 0 1px rgba(148,163,184,0.06);
             }
@@ -1719,7 +1719,7 @@ class LinkerManagerDialog extends ComfyDialog {
                 gap: 8px;
                 padding: 10px;
                 background: var(--ml-surface-elevated);
-                border-radius: var(--ml-radius-md);
+                border-radius: 0;
                 border: 1px solid transparent;
                 box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05);
             }
@@ -2133,7 +2133,7 @@ class LinkerManagerDialog extends ComfyDialog {
                 padding: 10px 12px;
                 background: rgba(78, 161, 255, 0.12);
                 border: 1px solid rgba(78, 161, 255, 0.28);
-                border-radius: 10px;
+                border-radius: 0;
                 color: var(--ml-text);
                 font-size: 12px;
             }
