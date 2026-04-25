@@ -1243,6 +1243,10 @@ class LinkerManagerDialog extends ComfyDialog {
         const styles = document.createElement('style');
         styles.id = 'model-linker-styles';
         styles.textContent = `
+            #model-linker-modal button {
+                font-size: 15px;
+            }
+
             /* CSS Variables for Model Linker */
             :root {
                 --ml-bg: #121212;
@@ -1318,7 +1322,6 @@ class LinkerManagerDialog extends ComfyDialog {
             }
             .ml-card:hover {
                 transform: translateY(-1px);
-                background: #232323;
                 box-shadow:
                     inset 0 0 0 1px rgba(255,255,255,0.05),
                     0 10px 24px rgba(0,0,0,0.14);
@@ -1715,6 +1718,23 @@ class LinkerManagerDialog extends ComfyDialog {
                 gap: 8px;
                 align-items: center;
             }
+            .ml-download-actions .ml-btn-download,
+            .ml-download-actions .ml-btn-download:hover:not(:disabled),
+            .ml-btn.ml-btn-download.ml-footer-btn,
+            .ml-btn.ml-btn-download.ml-footer-btn:hover:not(:disabled) {
+                background: rgba(255,255,255,0.03);
+                color: var(--ml-text);
+                border-color: rgba(255,255,255,0.1);
+                box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);
+            }
+            .ml-download-actions .ml-btn-download:hover:not(:disabled),
+            .ml-btn.ml-btn-download.ml-footer-btn:hover:not(:disabled) {
+                background: rgba(255,255,255,0.05);
+                color: var(--ml-text);
+                border-color: rgba(255,255,255,0.16);
+                box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);
+                transform: translateY(-1px);
+            }
             .ml-btn-download-main {
                 justify-content: flex-start;
                 padding-inline: 10px;
@@ -1926,7 +1946,7 @@ class LinkerManagerDialog extends ComfyDialog {
                 align-items: center;
                 gap: 10px;
                 flex-wrap: wrap;
-                padding: 14px 18px;
+                padding: 5px 18px;
                 background: linear-gradient(to top, rgba(18,18,18,0.98) 0%, rgba(18,18,18,0.92) 70%, transparent 100%);
                 border-top: 1px solid var(--ml-border);
             }
@@ -1938,6 +1958,23 @@ class LinkerManagerDialog extends ComfyDialog {
                 border-radius: 9px;
                 line-height: 1;
                 backdrop-filter: blur(10px);
+            }
+            .ml-btn.ml-footer-btn,
+            .ml-btn.ml-btn-primary.ml-footer-btn,
+            .ml-btn.ml-btn-download.ml-footer-btn {
+                background: rgba(255,255,255,0.03);
+                color: var(--ml-text);
+                border-color: rgba(255,255,255,0.1);
+                box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);
+            }
+            .ml-btn.ml-footer-btn:hover:not(:disabled),
+            .ml-btn.ml-btn-primary.ml-footer-btn:hover:not(:disabled),
+            .ml-btn.ml-btn-download.ml-footer-btn:hover:not(:disabled) {
+                background: rgba(255,255,255,0.05);
+                color: var(--ml-text);
+                border-color: rgba(255,255,255,0.16);
+                box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);
+                transform: translateY(-1px);
             }
 
             /* Tabs */
@@ -1971,8 +2008,8 @@ class LinkerManagerDialog extends ComfyDialog {
                 transition: transform 0.18s ease, opacity 0.18s ease, color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
             }
             .ml-tab:hover {
-                color: var(--ml-text, #e0e0e0);
-                background: linear-gradient(180deg, rgba(255,255,255,0.045) 0%, rgba(255,255,255,0.022) 100%);
+                color: var(--ml-text-muted, #888);
+                background: linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.015) 100%);
                 border-color: rgba(255,255,255,0.14);
                 transform: translateY(2px);
                 opacity: 0.96;
@@ -2897,7 +2934,7 @@ class LinkerManagerDialog extends ComfyDialog {
                     display: "flex",
                     justifyContent: "space-between",
                     alignItems: "center",
-                    padding: "20px 20px 10px 20px",
+                    padding: "5px 5px 5px",
                     borderBottom: "1px solid var(--border-color)",
                     backgroundColor: "var(--comfy-menu-bg, #202020)"
                 }
@@ -3709,11 +3746,12 @@ class LinkerManagerDialog extends ComfyDialog {
             style: {
                 display: "flex",
                 gap: "12px",
-                padding: "16px",
+                padding: "10px 5px 5px 5px",
                 flex: "1",
                 minHeight: "0",
                 alignItems: "stretch",
-                position: "relative"
+                position: "relative",
+                backgroundColor: "var(--ml-bg, #222)"
             }
         });
 
