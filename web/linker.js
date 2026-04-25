@@ -27,6 +27,7 @@ class LinkerManagerDialog extends ComfyDialog {
         this.fullscreen = false;
         this._dragging = false;
         this._dragStart = null;
+        this._analysisProgressToken = null;
         
         // Inject global styles for the redesigned UI
         this.injectStyles();
@@ -192,16 +193,9 @@ class LinkerManagerDialog extends ComfyDialog {
         if (!container) return;
 
         const state = this.getSearchState(missing);
-        const buttons = container.querySelectorAll('.ml-search-source-btn');
-        buttons.forEach(btn => {
-            const isActive = btn.dataset.searchSource === state.selectedSource;
-            btn.classList.toggle('ml-btn-primary', isActive);
-            btn.classList.toggle('ml-btn-secondary', !isActive);
-        });
-
-        const infoEl = container.querySelector(`#search-source-info-${missing.node_id}-${missing.widget_index}`);
-        if (infoEl) {
-            infoEl.textContent = `Selected source: ${this.getSearchSourceLabel(state.selectedSource)}`;
+        const selectEl = container.querySelector(`#search-source-select-${missing.node_id}-${missing.widget_index}`);
+        if (selectEl) {
+            selectEl.value = state.selectedSource;
         }
     }
 
@@ -1781,9 +1775,36 @@ class LinkerManagerDialog extends ComfyDialog {
             }
             .ml-search-source-bar {
                 display: flex;
-                flex-wrap: wrap;
-                gap: 5px;
+                align-items: center;
+                justify-content: space-between;
+                gap: 8px;
                 margin-bottom: 8px;
+            }
+            .ml-search-source-picker {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                min-width: 0;
+                margin-left: auto;
+            }
+            .ml-search-source-picker-label {
+                color: var(--ml-text-muted);
+                font-size: 11px;
+                white-space: nowrap;
+            }
+            .ml-search-source-select {
+                min-height: 30px;
+                padding: 5px 10px;
+                background: rgba(255,255,255,0.03);
+                color: var(--ml-text);
+                border: 1px solid rgba(255,255,255,0.1);
+                border-radius: 10px;
+                font-size: 11px;
+                outline: none;
+            }
+            .ml-search-source-select:focus {
+                border-color: rgba(255,255,255,0.16);
+                box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);
             }
             .ml-search-results {
                 margin-top: 8px;
@@ -2909,6 +2930,45 @@ class LinkerManagerDialog extends ComfyDialog {
                 </div>
             </div>
         `;
+    }
+
+    renderAnalysisProgress(progress = {}) {
+        const current = Number(progress.current) || 0;
+        const total = Number(progress.total) || 0;
+        const percent = total > 0 ? Math.max(0, Math.min(100, Math.round((current / total) * 100))) : 0;
+        const message = progress.message || 'Analyzing workflow...';
+        const modelName = progress.model_name ? this.escapeHtml(String(progress.model_name)) : '';
+        const detail = total > 0 ? `${current} / ${total}` : 'Preparing...';
+
+        return `
+            <div class="ml-download-section">
+                <div class="ml-status-inline">
+                    ${this.getStatusBadge('Analyzing', 'info')}
+                    <span class="ml-download-info">${message}</span>
+                </div>
+                ${this.renderProgressBar(percent, detail, `${percent}%`)}
+                ${modelName ? `<div class="ml-download-info">${modelName}</div>` : ''}
+            </div>
+        `;
+    }
+
+    async pollAnalysisProgress(analysisId, token) {
+        while (this._analysisProgressToken === token) {
+            try {
+                const response = await api.fetchApi(`/model_linker/analyze-progress/${analysisId}`);
+                if (response.ok && this.contentElement && this._analysisProgressToken === token) {
+                    const progress = await response.json();
+                    this.contentElement.innerHTML = this.renderAnalysisProgress(progress);
+                    if (progress.status === 'completed' || progress.status === 'error') {
+                        return;
+                    }
+                }
+            } catch (error) {
+                console.warn('Model Linker: analysis progress polling failed', error);
+            }
+
+            await new Promise(resolve => setTimeout(resolve, 250));
+        }
     }
     
     /**
@@ -4410,8 +4470,16 @@ class LinkerManagerDialog extends ComfyDialog {
     async loadWorkflowData(workflow = null) {
         if (!this.contentElement) return;
 
+        const analysisId = `an-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        this._analysisProgressToken = analysisId;
+
         // Show loading state
-        this.contentElement.innerHTML = '<p>Analyzing workflow...</p>';
+        this.contentElement.innerHTML = this.renderAnalysisProgress({
+            status: 'starting',
+            message: 'Starting analysis...',
+            current: 0,
+            total: 0
+        });
 
         try {
             // Use provided workflow, or get current workflow from ComfyUI
@@ -4420,16 +4488,20 @@ class LinkerManagerDialog extends ComfyDialog {
             }
             
             if (!workflow) {
+                this._analysisProgressToken = null;
                 this.contentElement.innerHTML = '<p>No workflow loaded. Please load a workflow first.</p>';
                 return;
             }
 
             // Call analyze endpoint
+            const progressPromise = this.pollAnalysisProgress(analysisId, analysisId);
             const response = await api.fetchApi('/model_linker/analyze', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ workflow })
+                body: JSON.stringify({ workflow, analysis_id: analysisId })
             });
+            this._analysisProgressToken = null;
+            await progressPromise;
 
             if (!response.ok) {
                 throw new Error(`API error: ${response.status}`);
@@ -4443,6 +4515,7 @@ class LinkerManagerDialog extends ComfyDialog {
             this.reconnectActiveDownloads();
 
         } catch (error) {
+            this._analysisProgressToken = null;
             console.error('Model Linker: Error loading workflow data:', error);
             if (this.contentElement) {
                 this.contentElement.innerHTML = `<p style="color: red;">Error: ${error.message}</p>`;
@@ -4687,13 +4760,11 @@ class LinkerManagerDialog extends ComfyDialog {
                 });
             }
 
-            const sourceButtons = container.querySelectorAll(`#search-sources-${missing.node_id}-${missing.widget_index} .ml-search-source-btn`);
-            sourceButtons.forEach(btn => {
-                btn.addEventListener('click', () => {
-                    this.setSearchSource(missing, btn.dataset.searchSource, container);
+            const sourceSelect = container.querySelector(`#search-source-select-${missing.node_id}-${missing.widget_index}`);
+            if (sourceSelect) {
+                sourceSelect.addEventListener('change', () => {
+                    this.setSearchSource(missing, sourceSelect.value, container);
                 });
-            });
-            if (sourceButtons.length > 0) {
                 this.syncSearchSourceUi(missing, container);
             }
 
@@ -4943,17 +5014,21 @@ class LinkerManagerDialog extends ComfyDialog {
             // No known download - offer search
             html += `<div class="ml-download-section">`;
             const searchSourcesId = `search-sources-${missing.node_id}-${missing.widget_index}`;
-            const searchInfoId = `search-source-info-${missing.node_id}-${missing.widget_index}`;
+            const searchSourceSelectId = `search-source-select-${missing.node_id}-${missing.widget_index}`;
             html += `<div id="${searchSourcesId}" class="ml-search-source-bar">`;
-            html += `<button type="button" class="ml-btn ml-btn-secondary ml-btn-sm ml-search-source-btn" data-search-source="local">Local DB</button>`;
-            html += `<button type="button" class="ml-btn ml-btn-secondary ml-btn-sm ml-search-source-btn" data-search-source="huggingface">HuggingFace</button>`;
-            html += `<button type="button" class="ml-btn ml-btn-secondary ml-btn-sm ml-search-source-btn" data-search-source="civitai">CivitAI</button>`;
-            html += `<button type="button" class="ml-btn ml-btn-secondary ml-btn-sm ml-search-source-btn" data-search-source="all">All</button>`;
-            html += `</div>`;
             html += `<button id="search-${missing.node_id}-${missing.widget_index}" class="ml-btn ml-btn-link">`;
             html += `<span class="ml-btn-icon">🔍</span> Search Online`;
             html += `</button>`;
-            html += `<div id="${searchInfoId}" class="ml-download-info">Selected source: Everything</div>`;
+            html += `<div class="ml-search-source-picker">`;
+            html += `<label class="ml-search-source-picker-label" for="${searchSourceSelectId}">Source</label>`;
+            html += `<select id="${searchSourceSelectId}" class="ml-search-source-select">`;
+            html += `<option value="all">Everything</option>`;
+            html += `<option value="local">Local Database</option>`;
+            html += `<option value="huggingface">HuggingFace</option>`;
+            html += `<option value="civitai">CivitAI</option>`;
+            html += `</select>`;
+            html += `</div>`;
+            html += `</div>`;
             html += this.renderDownloadTargetControls(missing, missing.category || 'checkpoints');
             html += `</div>`;
             html += `<div id="search-results-${missing.node_id}-${missing.widget_index}" class="ml-search-results"></div>`;

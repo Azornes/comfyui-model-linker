@@ -6,6 +6,7 @@
 @description: Extension for relinking missing models and downloading from HuggingFace/CivitAI
 """
 
+import asyncio
 import logging
 from .core.log_system.log_funcs import (
     log_debug,
@@ -31,6 +32,7 @@ class ModelLinkerExtension:
     def __init__(self):
         self.routes_setup = False
         self.logger = logging.getLogger(__name__)
+        self.analysis_progress = {}
 
     def initialize(self):
         """Initialize the extension and set up API routes."""
@@ -118,14 +120,41 @@ class ModelLinkerExtension:
                 try:
                     data = await request.json()
                     workflow_json = data.get("workflow")
+                    analysis_id = str(data.get("analysis_id") or "").strip()
 
                     if not workflow_json:
                         return web.json_response(
                             {"error": "Workflow JSON is required"}, status=400
                         )
 
+                    if analysis_id:
+                        self.analysis_progress[analysis_id] = {
+                            "status": "starting",
+                            "stage": "starting",
+                            "message": "Starting analysis...",
+                            "current": 0,
+                            "total": 0,
+                        }
+
+                    def update_analysis_progress(payload):
+                        if not analysis_id:
+                            return
+                        self.analysis_progress[analysis_id] = {
+                            **self.analysis_progress.get(analysis_id, {}),
+                            **payload,
+                            "status": "running"
+                            if payload.get("stage") != "completed"
+                            else "completed",
+                        }
+
                     # Analyze and find matches
-                    result = analyze_and_find_matches(workflow_json)
+                    result = await asyncio.to_thread(
+                        analyze_and_find_matches,
+                        workflow_json,
+                        0.0,
+                        10,
+                        update_analysis_progress if analysis_id else None,
+                    )
 
                     # Filter out LoraManager lorAs that already exist locally (exists=True)
                     # These should not appear in missing models at all
@@ -254,10 +283,51 @@ class ModelLinkerExtension:
                                 # now done on-demand via /model_linker/search endpoint
                                 # when user clicks "Search Online" button, not automatically
 
+                    if analysis_id:
+                        self.analysis_progress[analysis_id] = {
+                            **self.analysis_progress.get(analysis_id, {}),
+                            "status": "completed",
+                            "stage": "completed",
+                            "message": "Analysis complete",
+                            "current": result.get("total_missing", 0),
+                            "total": result.get("total_missing", 0),
+                        }
+
                     return web.json_response(result)
                 except Exception as e:
+                    if "analysis_id" in locals() and analysis_id:
+                        self.analysis_progress[analysis_id] = {
+                            "status": "error",
+                            "stage": "error",
+                            "message": str(e),
+                            "current": 0,
+                            "total": 0,
+                        }
                     self.logger.error(f"Model Linker analyze error: {e}", exc_info=True)
                     return web.json_response({"error": str(e)}, status=500)
+
+            @routes.get("/model_linker/analyze-progress/{analysis_id}")
+            async def get_analyze_progress(request):
+                """Get workflow analysis progress."""
+                analysis_id = request.match_info.get("analysis_id", "").strip()
+                if not analysis_id:
+                    return web.json_response(
+                        {"error": "Analysis ID is required"}, status=400
+                    )
+
+                progress = self.analysis_progress.get(analysis_id)
+                if not progress:
+                    return web.json_response(
+                        {
+                            "status": "unknown",
+                            "stage": "unknown",
+                            "message": "No analysis progress available",
+                            "current": 0,
+                            "total": 0,
+                        }
+                    )
+
+                return web.json_response(progress)
 
             @routes.post("/model_linker/resolve")
             async def resolve_models(request):

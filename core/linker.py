@@ -7,7 +7,7 @@ Integrates all components to provide high-level API for model linking.
 import os
 import re
 import json
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional, Tuple, Callable
 from urllib.parse import unquote
 
 from .log_system.log_funcs import (
@@ -227,6 +227,7 @@ def analyze_and_find_matches(
     workflow_json: Dict[str, Any],
     similarity_threshold: float = 0.0,
     max_matches_per_model: int = 10,
+    progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
 ) -> Dict[str, Any]:
     """
     Main entry point: analyze workflow and find matches for missing models.
@@ -264,9 +265,29 @@ def analyze_and_find_matches(
             'total_models_analyzed': count of all models in workflow
         }
     """
+    if progress_callback:
+        progress_callback(
+            {
+                "stage": "extracting",
+                "message": "Extracting workflow model references...",
+                "current": 0,
+                "total": 0,
+            }
+        )
+
     # Extract URLs from workflow (node.properties.models + regex)
     workflow_urls = extract_workflow_urls(workflow_json)
     log_debug(f"Extracted {len(workflow_urls)} URLs from workflow")
+
+    if progress_callback:
+        progress_callback(
+            {
+                "stage": "scanning",
+                "message": "Scanning local model index...",
+                "current": 0,
+                "total": 0,
+            }
+        )
 
     # Analyze workflow to find all model references
     # Get available models
@@ -280,10 +301,30 @@ def analyze_and_find_matches(
 
     ordered_candidates_cache: Dict[str, List[Dict[str, Any]]] = {}
 
+    if progress_callback:
+        progress_callback(
+            {
+                "stage": "analyzing",
+                "message": "Analyzing workflow nodes...",
+                "current": 0,
+                "total": 0,
+            }
+        )
+
     # Analyze workflow using the same already-scanned model list
     all_model_refs = analyze_workflow_models(
         workflow_json, available_models=available_models
     )
+
+    if progress_callback:
+        progress_callback(
+            {
+                "stage": "identifying",
+                "message": "Identifying missing models...",
+                "current": 0,
+                "total": len(all_model_refs),
+            }
+        )
 
     # Identify missing models
     missing_models = identify_missing_models(all_model_refs, available_models)
@@ -310,9 +351,32 @@ def analyze_and_find_matches(
                 missing["urn_version_id"] = urn.get("version_id")
                 missing["urn_type"] = urn.get("type", "")
 
+    if progress_callback:
+        progress_callback(
+            {
+                "stage": "matching",
+                "message": "Matching missing models...",
+                "current": 0,
+                "total": len(missing_models),
+            }
+        )
+
     # Find matches for each missing model
     missing_with_matches = []
-    for missing in missing_models:
+    total_missing = len(missing_models)
+    for index, missing in enumerate(missing_models, start=1):
+        if progress_callback:
+            progress_callback(
+                {
+                    "stage": "matching",
+                    "message": f"Analyzing model {index} of {total_missing}",
+                    "current": index,
+                    "total": total_missing,
+                    "model_name": missing.get("name")
+                    or missing.get("original_path", ""),
+                }
+            )
+
         # Skip LoraManager lorAs that already exist locally (exists=True means no linking needed)
         is_lora_v2 = missing.get("is_lora_v2")
         exists = missing.get("exists")
@@ -390,11 +454,23 @@ def analyze_and_find_matches(
 
         missing_with_matches.append({**missing, "matches": deduplicated_matches})
 
-    return {
+    result = {
         "missing_models": missing_with_matches,
         "total_missing": len(missing_with_matches),
         "total_models_analyzed": len(all_model_refs),
     }
+
+    if progress_callback:
+        progress_callback(
+            {
+                "stage": "completed",
+                "message": "Analysis complete",
+                "current": total_missing,
+                "total": total_missing,
+            }
+        )
+
+    return result
 
 
 def apply_resolution(
