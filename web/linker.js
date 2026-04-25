@@ -1626,12 +1626,15 @@ class LinkerManagerDialog extends ComfyDialog {
                 transform: translateY(-1px);
             }
             .ml-btn-link {
-                background: var(--ml-accent-blue);
-                color: #101010;
-                box-shadow: 0 8px 18px rgba(114,211,138,0.18);
+                background: rgba(255,255,255,0.03);
+                color: var(--ml-text);
+                border-color: rgba(255,255,255,0.1);
+                box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);
             }
             .ml-btn-link:hover:not(:disabled) {
-                background: var(--ml-accent-hover);
+                background: rgba(255,255,255,0.05);
+                color: var(--ml-text);
+                border-color: rgba(255,255,255,0.16);
                 transform: translateY(-1px);
             }
             .ml-btn-download {
@@ -1696,10 +1699,22 @@ class LinkerManagerDialog extends ComfyDialog {
             .ml-search-source-btn {
                 border-radius: 999px;
                 padding-inline: 11px;
-                color: var(--ml-text-muted);
+                background: rgba(255,255,255,0.03);
+                color: var(--ml-text);
+                border-color: rgba(255,255,255,0.1);
+                box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);
             }
             .ml-search-source-btn.ml-btn-primary {
-                box-shadow: 0 8px 18px rgba(114,211,138,0.14);
+                background: rgba(255,255,255,0.03);
+                color: var(--ml-text);
+                border-color: rgba(255,255,255,0.1);
+                box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);
+            }
+            .ml-search-source-btn:hover:not(:disabled),
+            .ml-search-source-btn.ml-btn-primary:hover:not(:disabled) {
+                background: rgba(255,255,255,0.05);
+                color: var(--ml-text);
+                border-color: rgba(255,255,255,0.16);
             }
             
             /* Download Section */
@@ -3119,14 +3134,28 @@ class LinkerManagerDialog extends ComfyDialog {
         const dy = e.clientY - this._dragStart.y;
         let top = this._dragStart.top + dy;
         let left = this._dragStart.left + dx;
-        // Clamp to viewport
+        // Clamp so the drag handle always stays reachable on screen.
         const vw = window.innerWidth;
         const vh = window.innerHeight;
-        const w = el.offsetWidth;
-        const h = el.offsetHeight;
         const pad = 4; // small padding
-        left = Math.max(-w + pad, Math.min(vw - pad, left));
-        top = Math.max(-h + pad, Math.min(vh - pad, top));
+        const handle = document.getElementById('model-linker-drag-handle');
+        if (handle) {
+            const handleOffsetLeft = handle.offsetLeft;
+            const handleOffsetTop = handle.offsetTop;
+            const handleWidth = handle.offsetWidth;
+            const handleHeight = handle.offsetHeight;
+            const minLeft = pad - handleOffsetLeft;
+            const maxLeft = vw - pad - handleOffsetLeft - handleWidth;
+            const minTop = pad - handleOffsetTop;
+            const maxTop = vh - pad - handleOffsetTop - handleHeight;
+            left = Math.max(minLeft, Math.min(maxLeft, left));
+            top = Math.max(minTop, Math.min(maxTop, top));
+        } else {
+            const w = el.offsetWidth;
+            const h = el.offsetHeight;
+            left = Math.max(-w + pad, Math.min(vw - pad, left));
+            top = Math.max(-h + pad, Math.min(vh - pad, top));
+        }
         el.style.top = `${Math.round(top)}px`;
         el.style.left = `${Math.round(left)}px`;
     }
