@@ -170,6 +170,10 @@ class LinkerManagerDialog extends ComfyDialog {
         };
     }
 
+    getSearchIconHtml() {
+        return `<span class="ml-btn-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"></circle><path d="M16 16l5 5"></path></svg></span>`;
+    }
+
     /**
      * Return true when at least one downloadable source was found
      */
@@ -1107,7 +1111,7 @@ class LinkerManagerDialog extends ComfyDialog {
                 civitaiLinkEl.innerHTML = `
                     <span class="ml-info-not-found">Model not found</span>
                     <a href="https://civitai.com/search?q=${encodeURIComponent(searchName)}" target="_blank" class="ml-info-link">
-                        🔍 Search on CivitAI
+                        ${this.getSearchIconHtml()} Search on CivitAI
                     </a>
                 `;
             }
@@ -1745,6 +1749,11 @@ class LinkerManagerDialog extends ComfyDialog {
             }
             .ml-btn-icon {
                 font-size: 12px;
+            }
+            .ml-btn-icon svg {
+                width: 13px;
+                height: 13px;
+                display: block;
             }
             .ml-card-actions .ml-btn,
             .ml-match-row .ml-btn,
@@ -5294,7 +5303,7 @@ class LinkerManagerDialog extends ComfyDialog {
             const searchSourceSelectId = `search-source-select-${missing.node_id}-${missing.widget_index}`;
             html += `<div id="${searchSourcesId}" class="ml-search-source-bar">`;
             html += `<button id="search-${missing.node_id}-${missing.widget_index}" class="ml-btn ml-btn-link">`;
-            html += `<span class="ml-btn-icon">🔍</span> Search Online`;
+            html += `${this.getSearchIconHtml()} Search`;
             html += `</button>`;
             html += `<div class="ml-search-source-picker">`;
             html += `<label class="ml-search-source-picker-label" for="${searchSourceSelectId}">Source</label>`;
@@ -6070,7 +6079,7 @@ class LinkerManagerDialog extends ComfyDialog {
         try {
             if (searchBtn) {
                 searchBtn.disabled = true;
-                searchBtn.textContent = `🔍 Searching ${selectedSourceLabel}...`;
+                searchBtn.innerHTML = `${this.getSearchIconHtml()} Searching ${selectedSourceLabel}...`;
             }
             if (resultsDiv) {
                 resultsDiv.style.display = 'block';
@@ -6130,7 +6139,7 @@ class LinkerManagerDialog extends ComfyDialog {
         } finally {
             if (searchBtn) {
                 searchBtn.disabled = false;
-                searchBtn.innerHTML = '<span class="ml-btn-icon">🔍</span> Search Again';
+                searchBtn.innerHTML = `${this.getSearchIconHtml()} Search Again`;
             }
         }
     }
