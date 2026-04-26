@@ -2757,6 +2757,30 @@ class LinkerManagerDialog extends ComfyDialog {
                 display: grid;
                 gap: 14px;
             }
+            .ml-options-section {
+                display: grid;
+                gap: 14px;
+                padding: 14px;
+                border: 1px solid rgba(255,255,255,0.08);
+                border-radius: 14px;
+                background: rgba(255,255,255,0.02);
+            }
+            .ml-options-section-title {
+                margin: 0;
+                font-size: 13px;
+                font-weight: 700;
+                color: var(--ml-text);
+            }
+            .ml-options-section-subtitle {
+                margin: -6px 0 0 0;
+                font-size: 12px;
+                color: var(--ml-text-muted);
+                line-height: 1.45;
+            }
+            .ml-options-stack {
+                display: grid;
+                gap: 14px;
+            }
             .ml-options-field {
                 display: flex;
                 flex-direction: column;
@@ -3673,73 +3697,85 @@ class LinkerManagerDialog extends ComfyDialog {
             <div class="ml-options-wrap">
                 <div class="ml-options-card">
                     <h3 class="ml-options-title">API Tokens</h3>
-                    <p class="ml-options-subtitle">Stored locally in your browser. API keys are used for downloads. Session token can improve CivitAI web search results, including NSFW items visible to your logged-in account. You can also choose how many CivitAI search results should be inspected before the best match is picked.</p>
+                    <p class="ml-options-subtitle">Stored locally in your browser. API keys are used for downloads. Session token can improve CivitAI web search results, including NSFW items visible to your logged-in account.</p>
                     <div class="ml-options-grid">
-                        <div class="ml-options-field">
-                            <label for="ml-options-civitai" class="ml-options-label">CivitAI API Key</label>
-                            <div class="ml-options-input-row">
-                                <input id="ml-options-civitai" class="ml-options-input" type="password" placeholder="Paste CivitAI API key" value="${tokens.civitai_key}">
-                                <button id="ml-options-civitai-toggle" type="button" class="ml-options-visibility-btn" aria-label="Show or hide CivitAI API key" title="Show or hide">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                        <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"></path>
-                                        <circle cx="12" cy="12" r="3"></circle>
-                                    </svg>
-                                </button>
-                            </div>
-                            <div class="ml-options-help">Used for direct CivitAI downloads that otherwise return HTTP 401 or 403.</div>
-                        </div>
-                        <div class="ml-options-field">
-                            <label for="ml-options-civitai-session" class="ml-options-label">CivitAI Session Token <button id="ml-options-civitai-help" type="button" class="ml-options-inline-link">(How to get)</button></label>
-                            <div class="ml-options-input-row">
-                                <input id="ml-options-civitai-session" class="ml-options-input" type="password" placeholder="Paste __Secure-civitai-token" value="${tokens.civitai_session_token}">
-                                <button id="ml-options-civitai-session-toggle" type="button" class="ml-options-visibility-btn" aria-label="Show or hide CivitAI session token" title="Show or hide">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                        <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"></path>
-                                        <circle cx="12" cy="12" r="3"></circle>
-                                    </svg>
-                                </button>
-                            </div>
-                            <div class="ml-options-help">Used only for CivitAI web search (civitai.red) to include results available to your logged-in session, including NSFW. Keep it private.</div>
-                            <div id="ml-options-civitai-help-panel" class="ml-options-help-panel" style="display: none;">
-                                <h4 class="ml-options-help-title">How to get the CivitAI Session Token</h4>
-                                <ol class="ml-options-help-list">
-                                    <li>Click <strong>Open CivitAI</strong> below and sign in to your CivitAI account in the browser.</li>
-                                    <li>On the CivitAI page, press <strong>F12</strong> to open DevTools.</li>
-                                    <li>Open the <strong>Application</strong> tab. If you do not see it, click the <strong>&raquo;</strong> overflow menu first.</li>
-                                    <li>In the left sidebar, open <strong>Storage</strong> or <strong>Cookies</strong>, then select <strong>https://civitai.red</strong>.</li>
-                                    <li>Find the cookie named <strong>__Secure-civitai-token</strong>.</li>
-                                    <li>Copy its <strong>Value</strong> and paste it into the <strong>CivitAI Session Token</strong> field above.</li>
-                                    <li>Click <strong>Save Tokens</strong>. The search cache will be cleared automatically.</li>
-                                </ol>
-                                <div class="ml-options-help-actions">
-                                    <button id="ml-options-open-civitai" class="ml-btn ml-btn-primary">Open CivitAI</button>
+                        <div class="ml-options-section">
+                            <h4 class="ml-options-section-title">CivitAI</h4>
+                            <p class="ml-options-section-subtitle">All CivitAI-related options are grouped here for downloads and search behavior.</p>
+                            <div class="ml-options-stack">
+                                <div class="ml-options-field">
+                                    <label for="ml-options-civitai" class="ml-options-label">CivitAI API Key</label>
+                                    <div class="ml-options-input-row">
+                                        <input id="ml-options-civitai" class="ml-options-input" type="password" placeholder="Paste CivitAI API key" value="${tokens.civitai_key}">
+                                        <button id="ml-options-civitai-toggle" type="button" class="ml-options-visibility-btn" aria-label="Show or hide CivitAI API key" title="Show or hide">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                                <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"></path>
+                                                <circle cx="12" cy="12" r="3"></circle>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                    <div class="ml-options-help">Used for direct CivitAI downloads that otherwise return HTTP 401 or 403.</div>
                                 </div>
-                                <div class="ml-options-help-note">Keep this token private. It gives access to search results visible to your logged-in CivitAI account.</div>
+                                <div class="ml-options-field">
+                                    <label for="ml-options-civitai-session" class="ml-options-label">CivitAI Session Token <button id="ml-options-civitai-help" type="button" class="ml-options-inline-link">(How to get)</button></label>
+                                    <div class="ml-options-input-row">
+                                        <input id="ml-options-civitai-session" class="ml-options-input" type="password" placeholder="Paste __Secure-civitai-token" value="${tokens.civitai_session_token}">
+                                        <button id="ml-options-civitai-session-toggle" type="button" class="ml-options-visibility-btn" aria-label="Show or hide CivitAI session token" title="Show or hide">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                                <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"></path>
+                                                <circle cx="12" cy="12" r="3"></circle>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                    <div class="ml-options-help">Used only for CivitAI web search (civitai.red) to include results available to your logged-in session, including NSFW. Keep it private.</div>
+                                    <div id="ml-options-civitai-help-panel" class="ml-options-help-panel" style="display: none;">
+                                        <h4 class="ml-options-help-title">How to get the CivitAI Session Token</h4>
+                                        <ol class="ml-options-help-list">
+                                            <li>Click <strong>Open CivitAI</strong> below and sign in to your CivitAI account in the browser.</li>
+                                            <li>On the CivitAI page, press <strong>F12</strong> to open DevTools.</li>
+                                            <li>Open the <strong>Application</strong> tab. If you do not see it, click the <strong>&raquo;</strong> overflow menu first.</li>
+                                            <li>In the left sidebar, open <strong>Storage</strong> or <strong>Cookies</strong>, then select <strong>https://civitai.red</strong>.</li>
+                                            <li>Find the cookie named <strong>__Secure-civitai-token</strong>.</li>
+                                            <li>Copy its <strong>Value</strong> and paste it into the <strong>CivitAI Session Token</strong> field above.</li>
+                                            <li>Click <strong>Save</strong>. The search cache will be cleared automatically.</li>
+                                        </ol>
+                                        <div class="ml-options-help-actions">
+                                            <button id="ml-options-open-civitai" class="ml-btn ml-btn-primary">Open CivitAI</button>
+                                        </div>
+                                        <div class="ml-options-help-note">Keep this token private. It gives access to search results visible to your logged-in CivitAI account.</div>
+                                    </div>
+                                </div>
+                                <div class="ml-options-field">
+                                    <label for="ml-options-civitai-limit" class="ml-options-label">CivitAI Models To Inspect</label>
+                                    <div class="ml-options-input-row">
+                                        <input id="ml-options-civitai-limit" class="ml-options-input" type="number" min="1" max="20" step="1" value="${tokens.civitai_candidate_limit}">
+                                    </div>
+                                    <div class="ml-options-help">Checks the first N CivitAI search results in order. Stops early when an exact 100% filename match is found.</div>
+                                </div>
                             </div>
                         </div>
-                        <div class="ml-options-field">
-                            <label for="ml-options-hf" class="ml-options-label">HuggingFace Token</label>
-                            <div class="ml-options-input-row">
-                                <input id="ml-options-hf" class="ml-options-input" type="password" placeholder="Paste HuggingFace token" value="${tokens.hf_token}">
-                                <button id="ml-options-hf-toggle" type="button" class="ml-options-visibility-btn" aria-label="Show or hide HuggingFace token" title="Show or hide">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                        <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"></path>
-                                        <circle cx="12" cy="12" r="3"></circle>
-                                    </svg>
-                                </button>
+                        <div class="ml-options-section">
+                            <h4 class="ml-options-section-title">HuggingFace</h4>
+                            <p class="ml-options-section-subtitle">Authorization for gated repositories and protected downloads.</p>
+                            <div class="ml-options-stack">
+                                <div class="ml-options-field">
+                                    <label for="ml-options-hf" class="ml-options-label">HuggingFace Token</label>
+                                    <div class="ml-options-input-row">
+                                        <input id="ml-options-hf" class="ml-options-input" type="password" placeholder="Paste HuggingFace token" value="${tokens.hf_token}">
+                                        <button id="ml-options-hf-toggle" type="button" class="ml-options-visibility-btn" aria-label="Show or hide HuggingFace token" title="Show or hide">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                                <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"></path>
+                                                <circle cx="12" cy="12" r="3"></circle>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                    <div class="ml-options-help">Used for gated HuggingFace repos that need authorization during download.</div>
+                                </div>
                             </div>
-                            <div class="ml-options-help">Used for gated HuggingFace repos that need authorization during download.</div>
-                        </div>
-                        <div class="ml-options-field">
-                            <label for="ml-options-civitai-limit" class="ml-options-label">CivitAI Models To Inspect</label>
-                            <div class="ml-options-input-row">
-                                <input id="ml-options-civitai-limit" class="ml-options-input" type="number" min="1" max="20" step="1" value="${tokens.civitai_candidate_limit}">
-                            </div>
-                            <div class="ml-options-help">Checks the first N CivitAI search results in order. Stops early when an exact 100% filename match is found.</div>
                         </div>
                     </div>
                     <div class="ml-options-actions">
-                        <button id="ml-options-save" class="ml-btn ml-btn-primary">Save Tokens</button>
+                        <button id="ml-options-save" class="ml-btn ml-btn-primary ml-footer-btn">Save</button>
                     </div>
                     <div id="ml-options-status" class="ml-options-status">Saved only on this machine.</div>
                 </div>
