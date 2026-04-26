@@ -2760,6 +2760,11 @@ class LinkerManagerDialog extends ComfyDialog {
                 color: var(--ml-text-muted);
                 line-height: 1.45;
             }
+            .ml-options-input-row {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            }
             .ml-options-input {
                 width: 100%;
                 padding: 10px 12px;
@@ -2773,6 +2778,34 @@ class LinkerManagerDialog extends ComfyDialog {
             .ml-options-input:focus {
                 border-color: rgba(78,161,255,0.45);
                 box-shadow: 0 0 0 3px rgba(78,161,255,0.12);
+            }
+            .ml-options-visibility-btn {
+                width: 38px;
+                min-width: 38px;
+                height: 38px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                border: 1px solid var(--ml-border);
+                border-radius: 10px;
+                background: rgba(255,255,255,0.04);
+                color: var(--ml-text-muted);
+                cursor: pointer;
+                transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+            }
+            .ml-options-visibility-btn:hover {
+                background: rgba(255,255,255,0.08);
+                color: var(--ml-text);
+                border-color: rgba(78,161,255,0.35);
+            }
+            .ml-options-visibility-btn[aria-pressed="true"] {
+                color: var(--ml-text);
+                border-color: rgba(78,161,255,0.35);
+            }
+            .ml-options-visibility-btn svg {
+                width: 18px;
+                height: 18px;
+                display: block;
             }
             .ml-options-actions {
                 display: flex;
@@ -3598,23 +3631,62 @@ class LinkerManagerDialog extends ComfyDialog {
                     <div class="ml-options-grid">
                         <div class="ml-options-field">
                             <label for="ml-options-civitai" class="ml-options-label">CivitAI API Key</label>
-                            <input id="ml-options-civitai" class="ml-options-input" type="password" placeholder="Paste CivitAI API key" value="${tokens.civitai_key}">
+                            <div class="ml-options-input-row">
+                                <input id="ml-options-civitai" class="ml-options-input" type="password" placeholder="Paste CivitAI API key" value="${tokens.civitai_key}">
+                                <button id="ml-options-civitai-toggle" type="button" class="ml-options-visibility-btn" aria-label="Show or hide CivitAI API key" title="Show or hide">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                        <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"></path>
+                                        <circle cx="12" cy="12" r="3"></circle>
+                                    </svg>
+                                </button>
+                            </div>
                             <div class="ml-options-help">Used for direct CivitAI downloads that otherwise return HTTP 401 or 403.</div>
                         </div>
                         <div class="ml-options-field">
-                            <label for="ml-options-civitai-session" class="ml-options-label">CivitAI Session Token</label>
-                            <input id="ml-options-civitai-session" class="ml-options-input" type="password" placeholder="Paste __Secure-civitai-token" value="${tokens.civitai_session_token}">
+                            <label for="ml-options-civitai-session" class="ml-options-label">CivitAI Session Token <button id="ml-options-civitai-help" type="button" class="ml-options-inline-link">(How to get)</button></label>
+                            <div class="ml-options-input-row">
+                                <input id="ml-options-civitai-session" class="ml-options-input" type="password" placeholder="Paste __Secure-civitai-token" value="${tokens.civitai_session_token}">
+                                <button id="ml-options-civitai-session-toggle" type="button" class="ml-options-visibility-btn" aria-label="Show or hide CivitAI session token" title="Show or hide">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                        <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"></path>
+                                        <circle cx="12" cy="12" r="3"></circle>
+                                    </svg>
+                                </button>
+                            </div>
                             <div class="ml-options-help">Used only for CivitAI web search (civitai.red) to include results available to your logged-in session, including NSFW. Keep it private.</div>
+                            <div id="ml-options-civitai-help-panel" class="ml-options-help-panel" style="display: none;">
+                                <h4 class="ml-options-help-title">How to get the CivitAI Session Token</h4>
+                                <ol class="ml-options-help-list">
+                                    <li>Click <strong>Open CivitAI</strong> below and sign in to your CivitAI account in the browser.</li>
+                                    <li>On the CivitAI page, press <strong>F12</strong> to open DevTools.</li>
+                                    <li>Open the <strong>Application</strong> tab. If you do not see it, click the <strong>&raquo;</strong> overflow menu first.</li>
+                                    <li>In the left sidebar, open <strong>Storage</strong> or <strong>Cookies</strong>, then select <strong>https://civitai.red</strong>.</li>
+                                    <li>Find the cookie named <strong>__Secure-civitai-token</strong>.</li>
+                                    <li>Copy its <strong>Value</strong> and paste it into the <strong>CivitAI Session Token</strong> field above.</li>
+                                    <li>Click <strong>Save Tokens</strong>. The search cache will be cleared automatically.</li>
+                                </ol>
+                                <div class="ml-options-help-actions">
+                                    <button id="ml-options-open-civitai" class="ml-btn ml-btn-primary">Open CivitAI</button>
+                                </div>
+                                <div class="ml-options-help-note">Keep this token private. It gives access to search results visible to your logged-in CivitAI account.</div>
+                            </div>
                         </div>
                         <div class="ml-options-field">
                             <label for="ml-options-hf" class="ml-options-label">HuggingFace Token</label>
-                            <input id="ml-options-hf" class="ml-options-input" type="password" placeholder="Paste HuggingFace token" value="${tokens.hf_token}">
+                            <div class="ml-options-input-row">
+                                <input id="ml-options-hf" class="ml-options-input" type="password" placeholder="Paste HuggingFace token" value="${tokens.hf_token}">
+                                <button id="ml-options-hf-toggle" type="button" class="ml-options-visibility-btn" aria-label="Show or hide HuggingFace token" title="Show or hide">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                        <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"></path>
+                                        <circle cx="12" cy="12" r="3"></circle>
+                                    </svg>
+                                </button>
+                            </div>
                             <div class="ml-options-help">Used for gated HuggingFace repos that need authorization during download.</div>
                         </div>
                     </div>
                     <div class="ml-options-actions">
                         <button id="ml-options-save" class="ml-btn ml-btn-primary">Save Tokens</button>
-                        <button id="ml-options-clear" class="ml-btn ml-btn-secondary">Clear Tokens</button>
                     </div>
                     <div id="ml-options-status" class="ml-options-status">Saved only on this machine.</div>
                 </div>
@@ -3624,9 +3696,52 @@ class LinkerManagerDialog extends ComfyDialog {
         const civitaiInput = this.contentElement.querySelector('#ml-options-civitai');
         const civitaiSessionInput = this.contentElement.querySelector('#ml-options-civitai-session');
         const hfInput = this.contentElement.querySelector('#ml-options-hf');
+        const civitaiToggle = this.contentElement.querySelector('#ml-options-civitai-toggle');
+        const civitaiSessionToggle = this.contentElement.querySelector('#ml-options-civitai-session-toggle');
+        const hfToggle = this.contentElement.querySelector('#ml-options-hf-toggle');
         const status = this.contentElement.querySelector('#ml-options-status');
         const saveBtn = this.contentElement.querySelector('#ml-options-save');
-        const clearBtn = this.contentElement.querySelector('#ml-options-clear');
+        const civitaiHelpBtn = this.contentElement.querySelector('#ml-options-civitai-help');
+        const civitaiHelpPanel = this.contentElement.querySelector('#ml-options-civitai-help-panel');
+        const openCivitaiBtn = this.contentElement.querySelector('#ml-options-open-civitai');
+
+        const getVisibilityIcon = (visible) => visible
+            ? `
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"></path>
+                    <circle cx="12" cy="12" r="3"></circle>
+                </svg>
+            `
+            : `
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M17.94 17.94A10.94 10.94 0 0 1 12 19C5 19 1 12 1 12a21.77 21.77 0 0 1 5.06-5.94"></path>
+                    <path d="M9.9 4.24A10.93 10.93 0 0 1 12 4c7 0 11 8 11 8a21.72 21.72 0 0 1-4.31 5.18"></path>
+                    <path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"></path>
+                    <path d="M1 1l22 22"></path>
+                </svg>
+            `;
+
+        const syncVisibilityToggle = (input, button) => {
+            if (!input || !button) return;
+            const visible = input.type === 'text';
+            button.innerHTML = getVisibilityIcon(visible);
+            button.style.color = visible ? 'var(--ml-text)' : 'var(--ml-text-muted)';
+            button.setAttribute('aria-pressed', visible ? 'true' : 'false');
+            button.setAttribute('title', visible ? 'Hide value' : 'Show value');
+        };
+
+        const bindVisibilityToggle = (input, button) => {
+            if (!input || !button) return;
+            syncVisibilityToggle(input, button);
+            button.addEventListener('click', () => {
+                input.type = input.type === 'password' ? 'text' : 'password';
+                syncVisibilityToggle(input, button);
+            });
+        };
+
+        bindVisibilityToggle(civitaiInput, civitaiToggle);
+        bindVisibilityToggle(civitaiSessionInput, civitaiSessionToggle);
+        bindVisibilityToggle(hfInput, hfToggle);
 
         if (saveBtn) {
             saveBtn.addEventListener('click', async () => {
@@ -3639,17 +3754,19 @@ class LinkerManagerDialog extends ComfyDialog {
             });
         }
 
-        if (clearBtn) {
-            clearBtn.addEventListener('click', async () => {
-                localStorage.removeItem('modelLinker.civitaiApiKey');
-                localStorage.removeItem('modelLinker.civitaiSessionToken');
-                localStorage.removeItem('modelLinker.huggingFaceToken');
-                if (civitaiInput) civitaiInput.value = '';
-                if (civitaiSessionInput) civitaiSessionInput.value = '';
-                if (hfInput) hfInput.value = '';
-                await this.clearSearchCaches();
-                if (status) status.textContent = 'Tokens cleared.';
-                this.showNotification('API tokens cleared and search cache reset', 'info');
+        if (civitaiHelpBtn && civitaiHelpPanel) {
+            civitaiHelpBtn.addEventListener('click', () => {
+                const isHidden = civitaiHelpPanel.style.display === 'none';
+                civitaiHelpPanel.style.display = isHidden ? 'block' : 'none';
+                civitaiHelpBtn.textContent = isHidden
+                    ? 'Hide CivitAI Token Instructions'
+                    : 'How To Get CivitAI Session Token';
+            });
+        }
+
+        if (openCivitaiBtn) {
+            openCivitaiBtn.addEventListener('click', () => {
+                window.open('https://civitai.red', '_blank', 'noopener,noreferrer');
             });
         }
     }
