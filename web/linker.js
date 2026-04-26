@@ -3412,6 +3412,7 @@ class LinkerManagerDialog extends ComfyDialog {
 
         const civitaiData = {
             ...(missing?.civitai_info || {}),
+            ...(missing?.civitai_search_result || {}),
             ...(missing?.download_source || {})
         };
         const baseModel = civitaiData.base_model || '';
@@ -3471,6 +3472,13 @@ class LinkerManagerDialog extends ComfyDialog {
         if (suggestion) {
             subfolderEl.value = suggestion;
         }
+    }
+
+    applySearchResultSuggestion(missing) {
+        const categoryEl = this.contentElement?.querySelector(`#download-category-${missing.node_id}-${missing.widget_index}`);
+        const subfolderEl = this.contentElement?.querySelector(`#download-subfolder-${missing.node_id}-${missing.widget_index}`);
+        if (!categoryEl || !subfolderEl) return;
+        this.applySuggestedCivitaiSubfolder(missing, categoryEl, subfolderEl);
     }
 
     async ensureDownloadSubfoldersLoaded(category = '') {
@@ -3598,10 +3606,16 @@ class LinkerManagerDialog extends ComfyDialog {
     }
 
     getStoredTokens() {
+        const civitaiCandidateLimitRaw = parseInt(localStorage.getItem('modelLinker.civitaiCandidateLimit') || '5', 10);
+        const civitai_candidate_limit = Number.isFinite(civitaiCandidateLimitRaw)
+            ? Math.min(20, Math.max(1, civitaiCandidateLimitRaw))
+            : 5;
+
         return {
             civitai_key: localStorage.getItem('modelLinker.civitaiApiKey') || '',
             civitai_session_token: localStorage.getItem('modelLinker.civitaiSessionToken') || '',
-            hf_token: localStorage.getItem('modelLinker.huggingFaceToken') || ''
+            hf_token: localStorage.getItem('modelLinker.huggingFaceToken') || '',
+            civitai_candidate_limit
         };
     }
 
@@ -3627,7 +3641,7 @@ class LinkerManagerDialog extends ComfyDialog {
             <div class="ml-options-wrap">
                 <div class="ml-options-card">
                     <h3 class="ml-options-title">API Tokens</h3>
-                    <p class="ml-options-subtitle">Stored locally in your browser. API keys are used for downloads. Session token can improve CivitAI web search results, including NSFW items visible to your logged-in account.</p>
+                    <p class="ml-options-subtitle">Stored locally in your browser. API keys are used for downloads. Session token can improve CivitAI web search results, including NSFW items visible to your logged-in account. You can also choose how many CivitAI search results should be inspected before the best match is picked.</p>
                     <div class="ml-options-grid">
                         <div class="ml-options-field">
                             <label for="ml-options-civitai" class="ml-options-label">CivitAI API Key</label>
@@ -3684,6 +3698,13 @@ class LinkerManagerDialog extends ComfyDialog {
                             </div>
                             <div class="ml-options-help">Used for gated HuggingFace repos that need authorization during download.</div>
                         </div>
+                        <div class="ml-options-field">
+                            <label for="ml-options-civitai-limit" class="ml-options-label">CivitAI Models To Inspect</label>
+                            <div class="ml-options-input-row">
+                                <input id="ml-options-civitai-limit" class="ml-options-input" type="number" min="1" max="20" step="1" value="${tokens.civitai_candidate_limit}">
+                            </div>
+                            <div class="ml-options-help">Checks the first N CivitAI search results in order. Stops early when an exact 100% filename match is found.</div>
+                        </div>
                     </div>
                     <div class="ml-options-actions">
                         <button id="ml-options-save" class="ml-btn ml-btn-primary">Save Tokens</button>
@@ -3699,6 +3720,7 @@ class LinkerManagerDialog extends ComfyDialog {
         const civitaiToggle = this.contentElement.querySelector('#ml-options-civitai-toggle');
         const civitaiSessionToggle = this.contentElement.querySelector('#ml-options-civitai-session-toggle');
         const hfToggle = this.contentElement.querySelector('#ml-options-hf-toggle');
+        const civitaiLimitInput = this.contentElement.querySelector('#ml-options-civitai-limit');
         const status = this.contentElement.querySelector('#ml-options-status');
         const saveBtn = this.contentElement.querySelector('#ml-options-save');
         const civitaiHelpBtn = this.contentElement.querySelector('#ml-options-civitai-help');
@@ -3745,12 +3767,20 @@ class LinkerManagerDialog extends ComfyDialog {
 
         if (saveBtn) {
             saveBtn.addEventListener('click', async () => {
+                const civitaiCandidateLimitRaw = parseInt(civitaiLimitInput?.value || `${tokens.civitai_candidate_limit}`, 10);
+                const civitaiCandidateLimit = Number.isFinite(civitaiCandidateLimitRaw)
+                    ? Math.min(20, Math.max(1, civitaiCandidateLimitRaw))
+                    : 5;
                 localStorage.setItem('modelLinker.civitaiApiKey', civitaiInput?.value || '');
                 localStorage.setItem('modelLinker.civitaiSessionToken', civitaiSessionInput?.value || '');
                 localStorage.setItem('modelLinker.huggingFaceToken', hfInput?.value || '');
+                localStorage.setItem('modelLinker.civitaiCandidateLimit', `${civitaiCandidateLimit}`);
+                if (civitaiLimitInput) {
+                    civitaiLimitInput.value = `${civitaiCandidateLimit}`;
+                }
                 await this.clearSearchCaches();
-                if (status) status.textContent = 'Tokens saved locally.';
-                this.showNotification('API tokens saved and search cache cleared', 'success');
+                if (status) status.textContent = 'Options saved locally.';
+                this.showNotification('Options saved and search cache cleared', 'success');
             });
         }
 
@@ -6027,7 +6057,8 @@ class LinkerManagerDialog extends ComfyDialog {
                 category,
                 is_urn: isUrn,
                 sources: [selectedSource],
-                civitai_session_token: tokens.civitai_session_token
+                civitai_session_token: tokens.civitai_session_token,
+                civitai_candidate_limit: tokens.civitai_candidate_limit
             };
             if (isUrn && missing.urn) {
                 searchData.model_id = missing.urn.model_id;
@@ -6051,7 +6082,18 @@ class LinkerManagerDialog extends ComfyDialog {
             state.results = this.mergeSearchResults(state.results, data);
             state.lastAttemptSources = Array.isArray(data.searched_sources) ? data.searched_sources : [selectedSource];
             state.lastAttemptFound = this.hasSearchResults(data);
+            if (data.civitai) {
+                missing.civitai_search_result = {
+                    base_model: data.civitai.base_model,
+                    tags: data.civitai.tags || [],
+                    trained_words: data.civitai.trained_words || [],
+                    filename: data.civitai.filename,
+                    name: data.civitai.name,
+                    type: data.civitai.type
+                };
+            }
             this.displaySearchResults(missing, state, resultsDiv);
+            this.applySearchResultSuggestion(missing);
 
         } catch (error) {
             console.error('Model Linker: Search error:', error);
@@ -6077,13 +6119,15 @@ class LinkerManagerDialog extends ComfyDialog {
         }
         
         try {
+            const tokens = this.getStoredTokens();
             const payload = {
                 filename: modelId + '_' + versionId,
                 category: '',
                 is_urn: true,
                 sources: ['civitai'],
                 model_id: modelId,
-                version_id: versionId
+                version_id: versionId,
+                civitai_candidate_limit: tokens.civitai_candidate_limit
             };
             console.log('resolveUrnAsync payload:', JSON.stringify(payload));
             

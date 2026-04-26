@@ -806,6 +806,18 @@ class ModelLinkerExtension:
                         data = await request.json()
                         filename = data.get("filename", "")
                         category = data.get("category", "")
+                        civitai_candidate_limit_raw = data.get(
+                            "civitai_candidate_limit", 5
+                        )
+                        try:
+                            civitai_candidate_limit = int(
+                                civitai_candidate_limit_raw
+                            )
+                        except (TypeError, ValueError):
+                            civitai_candidate_limit = 5
+                        civitai_candidate_limit = max(
+                            1, min(civitai_candidate_limit, 20)
+                        )
                         # Handle both boolean and string forms
                         is_urn_raw = data.get("is_urn", False)
                         civitai_session_token = data.get("civitai_session_token", "")
@@ -848,7 +860,7 @@ class ModelLinkerExtension:
                         search_civitai_source = "civitai" in normalized_sources
 
                         log_info(
-                            f"Search request: filename={filename}, category={category}, is_urn={is_urn}, model_id={data.get('model_id')}, version_id={data.get('version_id')}, sources={sorted(normalized_sources)}"
+                            f"Search request: filename={filename}, category={category}, is_urn={is_urn}, model_id={data.get('model_id')}, version_id={data.get('version_id')}, sources={sorted(normalized_sources)}, civitai_candidate_limit={civitai_candidate_limit}"
                         )
 
                         results = {
@@ -1008,6 +1020,7 @@ class ModelLinkerExtension:
                                     filename,
                                     model_type=category,
                                     session_token=civitai_session_token or None,
+                                    candidate_limit=civitai_candidate_limit,
                                 )
                                 log_search_result("civitai", civitai_result)
                                 if civitai_result:

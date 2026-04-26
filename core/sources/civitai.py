@@ -27,6 +27,8 @@ CIVITAI_API_URL = "https://civitai.com/api/v1"
 _search_cache: Dict[str, Any] = {}
 _urn_cache: Dict[tuple[int, int], Dict[str, Any]] = {}
 _hash_cache: Dict[str, Dict[str, Any]] = {}
+DEFAULT_CIVITAI_CANDIDATE_LIMIT = 5
+MAX_CIVITAI_CANDIDATE_LIMIT = 20
 
 CIVITAI_TYPE_MAP = {
     "checkpoint": "Checkpoint",
@@ -549,6 +551,7 @@ def search_civitai_for_file(
     exact_only: bool = False,
     model_type: Optional[str] = None,
     session_token: Optional[str] = None,
+    candidate_limit: int = DEFAULT_CIVITAI_CANDIDATE_LIMIT,
 ) -> Optional[Dict[str, Any]]:
     """
     Search CivitAI for a specific model file.
@@ -565,10 +568,11 @@ def search_civitai_for_file(
     """
     global _search_cache
 
+    candidate_limit = max(1, min(int(candidate_limit), MAX_CIVITAI_CANDIDATE_LIMIT))
     session_key = "session" if session_token else "anon"
     model_type_key = str(model_type or "").lower()
     cache_key = (
-        f"civit_{filename}_exact{exact_only}_type{model_type_key}_session{session_key}"
+        f"civit_{filename}_exact{exact_only}_type{model_type_key}_session{session_key}_limit{candidate_limit}"
     )
     if cache_key in _search_cache:
         log_debug(f"CivitAI search cache hit for {filename} (exact_only={exact_only})")
@@ -578,35 +582,42 @@ def search_civitai_for_file(
         # Prefer the CivitAI.red tRPC search because it is much closer to what
         # the browser search UI returns than the broad public /models API.
         trpc_candidates = _search_civitai_trpc_candidates(
-            filename, model_type=model_type, session_token=session_token
+            filename,
+            model_type=model_type,
+            session_token=session_token,
+            limit=candidate_limit,
         )
-        for candidate in trpc_candidates:
-            model_id = candidate["model_id"]
-            version_id = candidate.get("version_id")
-            log_info(
-                f"CivitAI tRPC candidate check: model_id={model_id}, preferred_version_id={version_id}, filename={filename}"
-            )
-            result = _find_civitai_file_in_model(
-                model_id=model_id,
-                filename=filename,
-                api_key=api_key,
-                exact_only=exact_only,
-                preferred_version_id=version_id,
-            )
-            if result:
-                _search_cache[cache_key] = result
-                log_info(
-                    f"Found {filename} via CivitAI tRPC fallback: model_id={result.get('model_id')}, version_id={result.get('version_id')}"
-                )
-                return result
+        candidates_to_check: List[Dict[str, Optional[int]]] = []
+        seen_candidates = set()
 
-        # Fallback: civitai.red HTML search, then inspect all submodels/versions
-        candidates = _search_civitai_red_candidates(filename)
-        for candidate in candidates:
+        def add_candidates(candidates: List[Dict[str, Optional[int]]]) -> None:
+            for candidate in candidates:
+                key = (candidate.get("model_id"), candidate.get("version_id"))
+                if key in seen_candidates:
+                    continue
+                seen_candidates.add(key)
+                candidates_to_check.append(candidate)
+                if len(candidates_to_check) >= candidate_limit:
+                    break
+
+        add_candidates(trpc_candidates)
+
+        if len(candidates_to_check) < candidate_limit:
+            html_candidates = _search_civitai_red_candidates(
+                filename, limit=candidate_limit
+            )
+            add_candidates(html_candidates)
+        else:
+            html_candidates = []
+
+        best_result = None
+        best_confidence = 0.0
+
+        for candidate in candidates_to_check:
             model_id = candidate["model_id"]
             version_id = candidate.get("version_id")
             log_info(
-                f"CivitAI.red candidate check: model_id={model_id}, preferred_version_id={version_id}, filename={filename}"
+                f"CivitAI candidate check: model_id={model_id}, preferred_version_id={version_id}, filename={filename}"
             )
             result = _find_civitai_file_in_model(
                 model_id=model_id,
@@ -616,16 +627,28 @@ def search_civitai_for_file(
                 preferred_version_id=version_id,
             )
             if result:
-                _search_cache[cache_key] = result
-                log_info(
-                    f"Found {filename} via CivitAI.red fallback: model_id={result.get('model_id')}, version_id={result.get('version_id')}"
-                )
-                return result
+                confidence = float(result.get("confidence") or 0.0)
+                if confidence >= 100.0:
+                    _search_cache[cache_key] = result
+                    log_info(
+                        f"Found exact CivitAI match for {filename}: model_id={result.get('model_id')}, version_id={result.get('version_id')}, candidate_limit={candidate_limit}"
+                    )
+                    return result
+                if confidence > best_confidence:
+                    best_result = result
+                    best_confidence = confidence
+
+        if best_result:
+            _search_cache[cache_key] = best_result
+            log_info(
+                f"Found best CivitAI match for {filename}: model_id={best_result.get('model_id')}, version_id={best_result.get('version_id')}, confidence={best_confidence}, candidate_limit={candidate_limit}"
+            )
+            return best_result
 
         # Not found
         _search_cache[cache_key] = None
         log_info(
-            f"CivitAI search no result: filename={filename}, trpc_candidates={len(trpc_candidates)}, html_candidates={len(candidates) if 'candidates' in locals() else 0}"
+            f"CivitAI search no result: filename={filename}, trpc_candidates={len(trpc_candidates)}, html_candidates={len(html_candidates)}, checked_candidates={len(candidates_to_check)}, candidate_limit={candidate_limit}"
         )
         return None
 
