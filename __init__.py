@@ -97,12 +97,16 @@ class ModelLinkerExtension:
                     search_model_list,
                     search_model_list_multiple,
                 )
-                from .core.sources.huggingface import search_huggingface_for_file
+                from .core.sources.huggingface import (
+                    search_huggingface_for_file,
+                    clear_search_cache as clear_huggingface_search_cache,
+                )
                 from .core.sources.civitai import (
                     search_civitai_for_file,
                     search_civitai,
                     get_civitai_download_url,
                     resolve_urn,
+                    clear_search_cache as clear_civitai_search_cache,
                 )
 
                 download_available = True
@@ -804,6 +808,7 @@ class ModelLinkerExtension:
                         category = data.get("category", "")
                         # Handle both boolean and string forms
                         is_urn_raw = data.get("is_urn", False)
+                        civitai_session_token = data.get("civitai_session_token", "")
                         is_urn = (
                             is_urn_raw
                             if isinstance(is_urn_raw, bool)
@@ -972,7 +977,8 @@ class ModelLinkerExtension:
                                         f"URN: No model_id/version_id, falling back to CivitAI search"
                                     )
                                     civitai_results = search_civitai(
-                                        filename, model_type=category
+                                        filename,
+                                        model_type=category,
                                     )
                                     log_search_result(
                                         "civitai/fallback",
@@ -999,7 +1005,9 @@ class ModelLinkerExtension:
                                         results["found"] = True
                             else:
                                 civitai_result = search_civitai_for_file(
-                                    filename, model_type=category
+                                    filename,
+                                    model_type=category,
+                                    session_token=civitai_session_token or None,
                                 )
                                 log_search_result("civitai", civitai_result)
                                 if civitai_result:
@@ -1013,6 +1021,18 @@ class ModelLinkerExtension:
 
                     except Exception as e:
                         log_exception(f"Model Linker search error: {e}")
+                        return web.json_response({"error": str(e)}, status=500)
+
+                @routes.post("/model_linker/clear-search-cache")
+                async def clear_search_cache_route(request):
+                    """Clear backend search caches after token/settings changes."""
+                    try:
+                        clear_huggingface_search_cache()
+                        clear_civitai_search_cache()
+                        log_info("Cleared backend search caches")
+                        return web.json_response({"success": True})
+                    except Exception as e:
+                        log_exception(f"Clear search cache error: {e}")
                         return web.json_response({"error": str(e)}, status=500)
 
                 @routes.post("/model_linker/download")

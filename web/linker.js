@@ -3567,8 +3567,23 @@ class LinkerManagerDialog extends ComfyDialog {
     getStoredTokens() {
         return {
             civitai_key: localStorage.getItem('modelLinker.civitaiApiKey') || '',
+            civitai_session_token: localStorage.getItem('modelLinker.civitaiSessionToken') || '',
             hf_token: localStorage.getItem('modelLinker.huggingFaceToken') || ''
         };
+    }
+
+    async clearSearchCaches() {
+        this.searchResultCache.clear();
+        try {
+            const response = await api.fetchApi('/model_linker/clear-search-cache', {
+                method: 'POST'
+            });
+            if (!response.ok) {
+                throw new Error('Failed to clear backend search cache');
+            }
+        } catch (error) {
+            console.error('Model Linker: Clear search cache error:', error);
+        }
     }
 
     displayOptions() {
@@ -3579,12 +3594,17 @@ class LinkerManagerDialog extends ComfyDialog {
             <div class="ml-options-wrap">
                 <div class="ml-options-card">
                     <h3 class="ml-options-title">API Tokens</h3>
-                    <p class="ml-options-subtitle">Stored locally in your browser. Used only for downloads that require authentication.</p>
+                    <p class="ml-options-subtitle">Stored locally in your browser. API keys are used for downloads. Session token can improve CivitAI web search results, including NSFW items visible to your logged-in account.</p>
                     <div class="ml-options-grid">
                         <div class="ml-options-field">
                             <label for="ml-options-civitai" class="ml-options-label">CivitAI API Key</label>
                             <input id="ml-options-civitai" class="ml-options-input" type="password" placeholder="Paste CivitAI API key" value="${tokens.civitai_key}">
                             <div class="ml-options-help">Used for direct CivitAI downloads that otherwise return HTTP 401 or 403.</div>
+                        </div>
+                        <div class="ml-options-field">
+                            <label for="ml-options-civitai-session" class="ml-options-label">CivitAI Session Token</label>
+                            <input id="ml-options-civitai-session" class="ml-options-input" type="password" placeholder="Paste __Secure-civitai-token" value="${tokens.civitai_session_token}">
+                            <div class="ml-options-help">Used only for CivitAI web search (civitai.red) to include results available to your logged-in session, including NSFW. Keep it private.</div>
                         </div>
                         <div class="ml-options-field">
                             <label for="ml-options-hf" class="ml-options-label">HuggingFace Token</label>
@@ -3602,28 +3622,34 @@ class LinkerManagerDialog extends ComfyDialog {
         `;
 
         const civitaiInput = this.contentElement.querySelector('#ml-options-civitai');
+        const civitaiSessionInput = this.contentElement.querySelector('#ml-options-civitai-session');
         const hfInput = this.contentElement.querySelector('#ml-options-hf');
         const status = this.contentElement.querySelector('#ml-options-status');
         const saveBtn = this.contentElement.querySelector('#ml-options-save');
         const clearBtn = this.contentElement.querySelector('#ml-options-clear');
 
         if (saveBtn) {
-            saveBtn.addEventListener('click', () => {
+            saveBtn.addEventListener('click', async () => {
                 localStorage.setItem('modelLinker.civitaiApiKey', civitaiInput?.value || '');
+                localStorage.setItem('modelLinker.civitaiSessionToken', civitaiSessionInput?.value || '');
                 localStorage.setItem('modelLinker.huggingFaceToken', hfInput?.value || '');
+                await this.clearSearchCaches();
                 if (status) status.textContent = 'Tokens saved locally.';
-                this.showNotification('API tokens saved', 'success');
+                this.showNotification('API tokens saved and search cache cleared', 'success');
             });
         }
 
         if (clearBtn) {
-            clearBtn.addEventListener('click', () => {
+            clearBtn.addEventListener('click', async () => {
                 localStorage.removeItem('modelLinker.civitaiApiKey');
+                localStorage.removeItem('modelLinker.civitaiSessionToken');
                 localStorage.removeItem('modelLinker.huggingFaceToken');
                 if (civitaiInput) civitaiInput.value = '';
+                if (civitaiSessionInput) civitaiSessionInput.value = '';
                 if (hfInput) hfInput.value = '';
+                await this.clearSearchCaches();
                 if (status) status.textContent = 'Tokens cleared.';
-                this.showNotification('API tokens cleared', 'info');
+                this.showNotification('API tokens cleared and search cache reset', 'info');
             });
         }
     }
@@ -5878,7 +5904,14 @@ class LinkerManagerDialog extends ComfyDialog {
             }
 
             // For URNs, include model_id and version_id for direct download
-            const searchData = { filename, category, is_urn: isUrn, sources: [selectedSource] };
+            const tokens = this.getStoredTokens();
+            const searchData = {
+                filename,
+                category,
+                is_urn: isUrn,
+                sources: [selectedSource],
+                civitai_session_token: tokens.civitai_session_token
+            };
             if (isUrn && missing.urn) {
                 searchData.model_id = missing.urn.model_id;
                 searchData.version_id = missing.urn.version_id;

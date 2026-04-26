@@ -24,6 +24,12 @@ HF_API_URL = "https://huggingface.co/api"
 _search_cache: Dict[str, Any] = {}
 
 
+def clear_search_cache():
+    """Clear cached HuggingFace search results."""
+    global _search_cache
+    _search_cache.clear()
+
+
 def parse_huggingface_url(url: str) -> Optional[Dict[str, str]]:
     """
     Parse a HuggingFace URL to extract repo and filename.

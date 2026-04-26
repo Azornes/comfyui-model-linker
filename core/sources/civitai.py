@@ -42,6 +42,12 @@ CIVITAI_TYPE_MAP = {
 }
 
 
+def clear_search_cache():
+    """Clear cached CivitAI search results."""
+    global _search_cache
+    _search_cache.clear()
+
+
 def _build_civitai_result_from_version(
     model_id: int,
     model_name: str,
@@ -210,6 +216,7 @@ def _extract_trpc_model_candidates(
 def _search_civitai_trpc_candidates(
     filename: str,
     model_type: Optional[str] = None,
+    session_token: Optional[str] = None,
     timeout: int = 15,
     limit: int = 5,
 ) -> List[Dict[str, Optional[int]]]:
@@ -266,9 +273,11 @@ def _search_civitai_trpc_candidates(
         "x-client": "web",
         "x-client-version": "5.0.1657",
     }
+    if session_token:
+        headers["Cookie"] = f"__Secure-civitai-token={session_token}"
 
     log_info(
-        f"CivitAI tRPC search start: filename={filename}, model_type={model_type}, url={url}"
+        f"CivitAI tRPC search start: filename={filename}, model_type={model_type}, session_token={'yes' if session_token else 'no'}, url={url}"
     )
 
     try:
@@ -539,6 +548,7 @@ def search_civitai_for_file(
     api_key: Optional[str] = None,
     exact_only: bool = False,
     model_type: Optional[str] = None,
+    session_token: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     """
     Search CivitAI for a specific model file.
@@ -555,7 +565,11 @@ def search_civitai_for_file(
     """
     global _search_cache
 
-    cache_key = f"civit_{filename}_exact{exact_only}"
+    session_key = "session" if session_token else "anon"
+    model_type_key = str(model_type or "").lower()
+    cache_key = (
+        f"civit_{filename}_exact{exact_only}_type{model_type_key}_session{session_key}"
+    )
     if cache_key in _search_cache:
         log_debug(f"CivitAI search cache hit for {filename} (exact_only={exact_only})")
         return _search_cache[cache_key]
@@ -564,7 +578,7 @@ def search_civitai_for_file(
         # Prefer the CivitAI.red tRPC search because it is much closer to what
         # the browser search UI returns than the broad public /models API.
         trpc_candidates = _search_civitai_trpc_candidates(
-            filename, model_type=model_type
+            filename, model_type=model_type, session_token=session_token
         )
         for candidate in trpc_candidates:
             model_id = candidate["model_id"]
