@@ -1,4 +1,6 @@
-﻿# ComfyUI Model Linker Extension
+# WIP
+
+
 
 A ComfyUI extension that helps users relink missing models in workflows using fuzzy matching.
 
