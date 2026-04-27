@@ -41,7 +41,10 @@
     "sd3_medium.safetensors": [
       "sd3-medium.safetensors",
       "sd3.safetensors",
-      "stable-diffusion-3-medium.safetensors"
+      "stable-diffusion-3-medium.safetensors",
+      "sd3_medium_incl_clips.safetensors",
+      "sd3_medium_incl_clips_t5xxlfp8.safetensors",
+      "sd3_medium_incl_clips_t5xxlfp16.safetensors"
     ],
     "RealESRGAN_x4plus.pth": [
       "realesrgan_x4plus.pth",
@@ -63,10 +66,24 @@
       "clip_large.safetensors",
       "openai-clip-l.safetensors"
     ],
+    "clip_g.safetensors": [
+      "clip-g.safetensors",
+      "clip_g_sdxl_base.safetensors"
+    ],
     "ae.safetensors": [
       "flux_ae.safetensors",
       "flux-ae.safetensors",
       "flux_vae.safetensors"
+    ],
+    "sdxl_vae.safetensors": [
+      "sd_xl_vae.safetensors",
+      "sdxl-vae.safetensors",
+      "sdxl.vae.safetensors"
+    ],
+    "clip_vision_g.safetensors": [
+      "clip-vision-g.safetensors",
+      "clip_g.safetensors",
+      "clipvision_g.safetensors"
     ]
   },
   "patterns": {
